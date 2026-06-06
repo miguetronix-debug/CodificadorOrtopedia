@@ -4,10 +4,8 @@
       "maxDuration": 60
     },
     "api/extract-pdf.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "memory": 1024
     }
-  },
-  "rewrites": [
-    { "source": "/", "destination": "/index.html" }
-  ]
+  }
 }
