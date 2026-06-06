@@ -1,8 +1,8 @@
 // Vercel Serverless Function — extracción de texto PDF
 // Recibe { pdf_base64: "..." } y devuelve { text, chars, pages }
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
+const pdfParse = require('pdf-parse');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -16,7 +16,6 @@ export default async function handler(req, res) {
 
     const buffer = Buffer.from(pdf_base64, 'base64');
 
-    // Verificar firma PDF
     if (buffer.slice(0, 4).toString() !== '%PDF') {
       return res.status(400).json({ error: 'El archivo no es un PDF válido' });
     }
@@ -34,4 +33,4 @@ export default async function handler(req, res) {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-}
+};
