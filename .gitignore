@@ -1,0 +1,12 @@
+node_modules/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+.vercel
+*.log
+
+# Solo para uso local — contiene API key
+servidor.py
+Iniciar\ Codificador.command
+codificador_medico.html

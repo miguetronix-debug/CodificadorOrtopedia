@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/analyze.js": {
+      "maxDuration": 60
+    },
+    "api/extract-pdf.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" }
+  ]
+}

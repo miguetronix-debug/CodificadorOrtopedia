@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codificador Médico ICD · CPT · Insumos</title>
+<!-- Sin dependencias externas para PDF -->
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3350;
+    --accent: #4f8ef7;
+    --accent2: #38c9a8;
+    --accent3: #f7a84f;
+    --danger: #f75f5f;
+    --text: #e8eaf0;
+    --muted: #7b82a0;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* HEADER */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  header .logo {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  header p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  header .spacer { flex: 1; }
+  header .api-badge {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  header .api-badge:hover { border-color: var(--accent); color: var(--accent); }
+  header .api-badge.connected { border-color: var(--accent2); color: var(--accent2); }
+
+  /* MAIN LAYOUT */
+  main { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+  /* API KEY MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 200;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    width: 480px;
+    max-width: 95vw;
+  }
+  .modal h3 { font-size: 16px; margin-bottom: 8px; }
+  .modal p { font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+  .modal input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--text);
+    font-size: 14px; font-family: monospace; margin-bottom: 14px;
+  }
+  .modal input:focus { outline: none; border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  /* BUTTONS */
+  .btn {
+    padding: 9px 18px; border-radius: 8px; border: none;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #3d7ae0; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-success { background: var(--accent2); color: #0f1117; }
+  .btn-success:hover { background: #2db896; }
+  .btn-lg { padding: 12px 28px; font-size: 15px; border-radius: 10px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* INPUT SECTION */
+  .section-title {
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.8px;
+    margin-bottom: 12px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .input-tabs {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+  .tab-btn {
+    padding: 7px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); font-size: 13px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tab-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+  textarea {
+    width: 100%; min-height: 180px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; color: var(--text);
+    font-size: 14px; line-height: 1.6; resize: vertical;
+    font-family: inherit;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px; padding: 40px 20px;
+    text-align: center; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent); background: rgba(79,142,247,0.05);
+  }
+  .upload-zone .icon { font-size: 36px; margin-bottom: 10px; }
+  .upload-zone p { color: var(--muted); font-size: 14px; }
+  .upload-zone strong { color: var(--accent); }
+  #file-input { display: none; }
+
+  .file-info {
+    display: none;
+    align-items: center; gap: 10px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 16px;
+    margin-top: 10px;
+  }
+  .file-info.show { display: flex; }
+  .file-info .file-icon { font-size: 22px; }
+  .file-info .file-name { font-size: 14px; font-weight: 600; flex: 1; }
+  .file-info .file-size { font-size: 12px; color: var(--muted); }
+
+  .analyze-bar {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 16px;
+  }
+  .char-count { font-size: 12px; color: var(--muted); flex: 1; }
+
+  /* LOADING */
+  .loading-overlay {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .loading-overlay.show { display: block; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-overlay p { color: var(--muted); font-size: 14px; }
+  .loading-steps { margin-top: 14px; text-align: left; max-width: 320px; margin: 14px auto 0; }
+  .loading-step {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--muted); padding: 4px 0;
+  }
+  .loading-step.done { color: var(--accent2); }
+  .loading-step.active { color: var(--text); }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+  .loading-step.done .step-dot { background: var(--accent2); }
+  .loading-step.active .step-dot { background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* RESULTS */
+  .results-header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 20px;
+  }
+  .results-header h2 { font-size: 20px; font-weight: 700; }
+  .results-header .meta { font-size: 13px; color: var(--muted); }
+  .results-tabs {
+    display: flex; gap: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .res-tab {
+    padding: 10px 18px; font-size: 13px; font-weight: 600;
+    border: none; background: transparent; color: var(--muted);
+    cursor: pointer; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; transition: all 0.2s;
+  }
+  .res-tab:hover { color: var(--text); }
+  .res-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .res-panel { display: none; }
+  .res-panel.active { display: block; }
+
+  /* DIAGNOSIS TABLE */
+  .dx-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .dx-card-header {
+    background: var(--surface2);
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .dx-num {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .dx-name { font-size: 15px; font-weight: 600; flex: 1; }
+  .evidence-badge {
+    font-size: 11px; padding: 3px 8px; border-radius: 4px;
+    font-weight: 600;
+  }
+  .ev-1 { background: rgba(56,201,168,0.15); color: var(--accent2); }
+  .ev-2 { background: rgba(79,142,247,0.15); color: var(--accent); }
+  .ev-3 { background: rgba(247,168,79,0.15); color: var(--accent3); }
+  .ev-4 { background: rgba(247,95,95,0.15); color: var(--danger); }
+  .dx-codes {
+    padding: 14px 16px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  @media(max-width:600px) { .dx-codes { grid-template-columns: 1fr; } }
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+  }
+  .code-system {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--muted); margin-bottom: 4px;
+  }
+  .code-value {
+    font-size: 18px; font-weight: 700; color: var(--accent);
+    font-family: monospace; margin-bottom: 2px;
+  }
+  .code-desc { font-size: 12px; color: var(--muted); }
+  .dx-justif {
+    padding: 0 16px 14px;
+    font-size: 13px; color: var(--muted); line-height: 1.6;
+    border-top: 1px solid var(--border); padding-top: 12px;
+  }
+  .dx-justif strong { color: var(--text); }
+
+  /* CPT TABLE */
+  .cpt-table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); }
+  th {
+    padding: 10px 14px; text-align: left;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(79,142,247,0.04); }
+  .cpt-code { font-family: monospace; font-size: 15px; font-weight: 700; color: var(--accent); }
+  .cpt-modifier { font-family: monospace; font-size: 12px; color: var(--accent3); margin-left: 4px; }
+  .rvu-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .rvu-bar { height: 6px; border-radius: 3px; background: var(--accent); min-width: 4px; }
+  .rvu-val { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .fee-val { font-weight: 700; color: var(--accent2); }
+  .rank-badge {
+    width: 22px; height: 22px; border-radius: 50%;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rank-1 { background: #ffd700; color: #000; }
+  .rank-2 { background: #c0c0c0; color: #000; }
+  .rank-3 { background: #cd7f32; color: #fff; }
+  .rank-n { background: var(--surface2); color: var(--muted); }
+
+  /* SUPPLIES */
+  .supply-group { margin-bottom: 24px; }
+  .supply-group-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .supply-group-cpt {
+    font-family: monospace; font-size: 14px; font-weight: 700;
+    color: var(--accent); background: rgba(79,142,247,0.1);
+    padding: 3px 8px; border-radius: 5px;
+  }
+  .supply-group-name { font-size: 14px; color: var(--muted); }
+  .supply-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+  }
+  .supply-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .supply-cat-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-top: 5px; flex-shrink: 0;
+  }
+  .cat-implant { background: var(--accent); }
+  .cat-disposable { background: var(--accent2); }
+  .cat-anesthesia { background: var(--accent3); }
+  .cat-instrument { background: var(--danger); }
+  .cat-other { background: var(--muted); }
+  .supply-name { font-size: 13px; font-weight: 600; }
+  .supply-spec { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .supply-qty { font-size: 11px; color: var(--accent); font-weight: 700; margin-top: 4px; }
+
+  /* ERROR / EMPTY */
+  .error-box {
+    background: rgba(247,95,95,0.08);
+    border: 1px solid rgba(247,95,95,0.3);
+    border-radius: 10px; padding: 16px 20px;
+    color: var(--danger); font-size: 14px;
+    margin-bottom: 20px;
+  }
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+  .empty-state h3 { font-size: 16px; color: var(--text); margin-bottom: 8px; }
+  .empty-state p { font-size: 14px; line-height: 1.6; }
+
+  /* EXPORT BAR */
+  .export-bar {
+    display: flex; gap: 10px; align-items: center;
+    margin-bottom: 20px;
+  }
+  .export-bar .spacer { flex: 1; }
+
+  /* PRINT */
+  @media print {
+    header, .input-section, .export-bar, .results-tabs, .api-modal { display: none; }
+    body { background: #fff; color: #000; }
+    .card, .dx-card, table { border: 1px solid #ddd; }
+    .res-panel { display: block !important; }
+  }
+
+  /* TOOLTIPS */
+  [title] { cursor: help; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- API KEY MODAL -->
+<div class="modal-overlay" id="apiModal">
+  <div class="modal">
+    <h3>🔑 Configurar API Key de Claude</h3>
+    <p>Esta aplicación usa la API de Anthropic (Claude) para analizar los reportes médicos. Tu API key se guarda localmente en el navegador y nunca se envía a ningún servidor externo excepto a <strong>api.anthropic.com</strong>.</p>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+      Obtén tu API key en <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeApiModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveApiKey()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">🏥</div>
+  <div>
+    <h1>Codificador Médico</h1>
+    <p>ICD-9 · ICD-10 · CPT · Insumos Quirúrgicos</p>
+  </div>
+  <div class="spacer"></div>
+  <button class="api-badge" id="apiBadge" onclick="openApiModal()">⚙ API Key</button>
+</header>
+
+<main>
+
+  <!-- INPUT SECTION -->
+  <div class="input-section">
+    <div class="section-title">Reporte de Imagen Diagnóstica</div>
+    <div class="card">
+      <div class="input-tabs">
+        <button class="tab-btn active" id="tabText" onclick="switchTab('text')">✏️ Texto / Pegar</button>
+        <button class="tab-btn" id="tabFile" onclick="switchTab('file')">📄 Subir Archivo</button>
+      </div>
+
+      <!-- Text Input -->
+      <div id="panelText">
+        <textarea id="reportText" placeholder="Pegue aquí el texto del reporte de imagen diagnóstica (RX, TC, RMN, US, etc.)...
+
+Ejemplo:
+TOMOGRAFÍA DE RODILLA DERECHA
+Hallazgos: Se evidencia ruptura completa del ligamento cruzado anterior..."></textarea>
+      </div>
+
+      <!-- File Input -->
+      <div id="panelFile" style="display:none">
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('file-input').click()"
+             ondragover="handleDragOver(event)" ondrop="handleDrop(event)" ondragleave="handleDragLeave(event)">
+          <div class="icon">📂</div>
+          <p><strong>Haz clic aquí</strong> o arrastra el archivo</p>
+          <p style="font-size:12px;margin-top:6px;">PDF, Word (.docx), TXT — Máx. 10MB</p>
+        </div>
+        <input type="file" id="file-input" accept=".pdf,.txt,.docx,.doc,.rtf" onchange="handleFileSelect(event)">
+        <div class="file-info" id="fileInfo">
+          <span class="file-icon">📄</span>
+          <span class="file-name" id="fileName"></span>
+          <span class="file-size" id="fileSize"></span>
+          <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="clearFile()">✕</button>
+        </div>
+      </div>
+
+      <div class="analyze-bar">
+        <span class="char-count" id="charCount">0 caracteres</span>
+        <button class="btn btn-success btn-lg" id="analyzeBtn" onclick="analyzeReport()">
+          🔍 Analizar Reporte
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <p style="font-size:16px;font-weight:600;margin-bottom:8px">Analizando reporte médico...</p>
+    <p>Claude está procesando y codificando los diagnósticos</p>
+    <div class="loading-steps">
+      <div class="loading-step" id="step1"><div class="step-dot"></div>Extrayendo diagnósticos del reporte</div>
+      <div class="loading-step" id="step2"><div class="step-dot"></div>Asignando códigos ICD-9 e ICD-10</div>
+      <div class="loading-step" id="step3"><div class="step-dot"></div>Buscando códigos CPT relacionados</div>
+      <div class="loading-step" id="step4"><div class="step-dot"></div>Calculando honorarios y RVU</div>
+      <div class="loading-step" id="step5"><div class="step-dot"></div>Generando lista de insumos</div>
+    </div>
+  </div>
+
+  <!-- ERROR BOX -->
+  <div class="error-box" id="errorBox" style="display:none"></div>
+
+  <!-- RESULTS -->
+  <div id="resultsSection" style="display:none">
+    <div class="results-header">
+      <h2>📋 Resultados del Análisis</h2>
+      <span class="meta" id="resultsMeta"></span>
+    </div>
+
+    <div class="export-bar">
+      <button class="btn btn-secondary" onclick="exportPDF()">📄 Exportar PDF</button>
+      <button class="btn btn-secondary" onclick="exportWord()">📝 Exportar Word</button>
+      <button class="btn btn-secondary" onclick="exportJSON()">⬇ JSON</button>
+      <div class="spacer"></div>
+      <button class="btn btn-secondary" onclick="clearResults()">✕ Limpiar</button>
+    </div>
+
+    <div class="results-tabs">
+      <button class="res-tab active" onclick="showPanel('diagnoses')">🩺 Diagnósticos & ICD</button>
+      <button class="res-tab" onclick="showPanel('cpt')">💊 Procedimientos CPT</button>
+      <button class="res-tab" onclick="showPanel('supplies')">🏪 Insumos Quirúrgicos</button>
+      <button class="res-tab" onclick="showPanel('summary')">📊 Resumen</button>
+    </div>
+
+    <!-- DIAGNOSES PANEL -->
+    <div class="res-panel active" id="panel-diagnoses"></div>
+
+    <!-- CPT PANEL -->
+    <div class="res-panel" id="panel-cpt"></div>
+
+    <!-- SUPPLIES PANEL -->
+    <div class="res-panel" id="panel-supplies"></div>
+
+    <!-- SUMMARY PANEL -->
+    <div class="res-panel" id="panel-summary"></div>
+  </div>
+
+  <!-- EMPTY STATE -->
+  <div class="empty-state" id="emptyState">
+    <div class="icon">🏥</div>
+    <h3>Codificador Médico ICD · CPT · Insumos</h3>
+    <p>Ingrese el texto de un reporte de imagen diagnóstica (RX, TC, RMN, Ultrasonido, etc.)<br>
+    y el sistema extraerá automáticamente los diagnósticos con sus códigos ICD-9/ICD-10,<br>
+    los procedimientos CPT ordenados por honorarios, y la lista de insumos quirúrgicos necesarios.</p>
+    <br>
+    <p style="font-size:12px;color:var(--muted)">⚠ Requiere API Key de Anthropic Claude · Uso exclusivo para profesionales médicos</p>
+  </div>
+
+</main>
+
+<script>
+// ─── PDF Text Extractor (sin dependencias externas) ──────────────────────────
+// Extrae texto de PDFs en JavaScript puro, sin librerías CDN
+async function extractPdfText(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+
+  // Verificar firma PDF
+  const header = String.fromCharCode(...bytes.slice(0, 5));
+  if (!header.startsWith('%PDF')) {
+    throw new Error('El archivo no es un PDF válido.');
+  }
+
+  // Decodificar como latin1 para preservar bytes
+  const raw = new TextDecoder('latin1').decode(bytes);
+
+  let extractedText = '';
+
+  // ── Método 1: extraer streams de contenido y buscar operadores de texto ──
+  // Buscar objetos stream
+  const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  let streamMatch;
+
+  while ((streamMatch = streamRegex.exec(raw)) !== null) {
+    const streamContent = streamMatch[1];
+    // Solo procesar streams que parecen contenido de página (no comprimidos)
+    if (streamContent.includes('BT') || streamContent.includes('Tj') || streamContent.includes('TJ')) {
+      extractedText += parsePdfTextStream(streamContent) + '\n';
+    }
+  }
+
+  // ── Método 2: extraer texto de strings entre paréntesis en bloques BT..ET ──
+  if (extractedText.trim().length < 20) {
+    extractedText = extractTextFromBTBlocks(raw);
+  }
+
+  // ── Método 3: extraer strings literales del PDF (fallback agresivo) ──
+  if (extractedText.trim().length < 20) {
+    extractedText = extractAllPdfStrings(raw);
+  }
+
+  const result = cleanPdfText(extractedText);
+
+  if (result.length < 15) {
+    throw new Error(
+      'No se pudo extraer texto de este PDF. ' +
+      'Posiblemente es un PDF escaneado (imagen). ' +
+      'Por favor copia y pega el texto manualmente en la pestaña "Texto / Pegar".'
+    );
+  }
+
+  return result;
+}
+
+function parsePdfTextStream(stream) {
+  let text = '';
+  // Extraer bloques BT...ET
+  const btBlocks = stream.match(/BT[\s\S]*?ET/g) || [];
+  for (const block of btBlocks) {
+    // Operador Tj: (texto) Tj
+    const tjMatches = block.matchAll(/\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*Tj/g);
+    for (const m of tjMatches) text += decodePdfString(m[1]) + ' ';
+
+    // Operador TJ: [(texto) num (texto)] TJ
+    const tjArrMatches = block.matchAll(/\[([\s\S]*?)\]\s*TJ/g);
+    for (const m of tjArrMatches) {
+      const parts = m[1].matchAll(/\(([^)\\]*(?:\\.[^)\\]*)*)\)/g);
+      for (const p of parts) text += decodePdfString(p[1]);
+      text += ' ';
+    }
+
+    // Operador ': (texto) '
+    const quoteMatches = block.matchAll(/\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*'/g);
+    for (const m of quoteMatches) text += decodePdfString(m[1]) + '\n';
+  }
+  return text;
+}
+
+function extractTextFromBTBlocks(raw) {
+  let text = '';
+  const btBlocks = raw.match(/BT[\s\S]{1,2000}?ET/g) || [];
+  for (const block of btBlocks) {
+    const strings = block.matchAll(/\(([^)\\]{1,200}(?:\\.[^)\\]{0,200})*)\)/g);
+    for (const s of strings) {
+      const decoded = decodePdfString(s[1]);
+      if (decoded.trim().length > 0) text += decoded + ' ';
+    }
+    text += '\n';
+  }
+  return text;
+}
+
+function extractAllPdfStrings(raw) {
+  // Último recurso: extraer todos los strings entre paréntesis del PDF
+  let text = '';
+  const allStrings = raw.matchAll(/\(([^\x00-\x08\x0e-\x1f()\\]{3,200})\)/g);
+  for (const s of allStrings) {
+    const decoded = decodePdfString(s[1]);
+    if (/[a-zA-ZáéíóúÁÉÍÓÚñÑ]{3,}/.test(decoded)) {
+      text += decoded + ' ';
+    }
+  }
+  return text;
+}
+
+function decodePdfString(str) {
+  // Decodificar secuencias de escape PDF
+  return str
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
+    .replace(/\\(.)/g, '$1')
+    // Convertir caracteres especiales comunes
+    .replace(/\xc3\xa1/g, 'á').replace(/\xc3\xa9/g, 'é')
+    .replace(/\xc3\xad/g, 'í').replace(/\xc3\xb3/g, 'ó')
+    .replace(/\xc3\xba/g, 'ú').replace(/\xc3\xb1/g, 'ñ');
+}
+
+function cleanPdfText(text) {
+  return text
+    .replace(/[\x00-\x08\x0e-\x1f\x7f-\x9f]/g, ' ') // control chars
+    .replace(/[ \t]{3,}/g, '  ')                        // espacios múltiples
+    .replace(/\n{4,}/g, '\n\n')                         // saltos excesivos
+    .trim();
+}
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let currentResults = null;
+let currentTab = 'text';
+let uploadedFileText = '';
+
+// ─── API Key Management ──────────────────────────────────────────────────────
+// En producción (Vercel) la clave está en variables de entorno del servidor.
+// El cliente no necesita clave — todas las llamadas van a /api/analyze.
+function getApiKey() { return localStorage.getItem('claude_api_key') || ''; }
+function openApiModal() {
+  document.getElementById('apiKeyInput').value = '';
+  document.getElementById('apiModal').classList.add('show');
+}
+function closeApiModal() { document.getElementById('apiModal').classList.remove('show'); }
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) { alert('Por favor ingresa tu API key'); return; }
+  localStorage.setItem('claude_api_key', key);
+  updateApiBadge();
+  closeApiModal();
+}
+function updateApiBadge() {
+  const badge = document.getElementById('apiBadge');
+  // En producción no se necesita key en el cliente
+  badge.textContent = '✓ Servidor activo';
+  badge.classList.add('connected');
+}
+
+// ─── Tab Switching ───────────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('panelText').style.display = tab === 'text' ? 'block' : 'none';
+  document.getElementById('panelFile').style.display = tab === 'file' ? 'block' : 'none';
+  document.getElementById('tabText').classList.toggle('active', tab === 'text');
+  document.getElementById('tabFile').classList.toggle('active', tab === 'file');
+  updateCharCount();
+}
+
+// ─── File Handling ───────────────────────────────────────────────────────────
+function handleDragOver(e) { e.preventDefault(); document.getElementById('uploadZone').classList.add('drag-over'); }
+function handleDragLeave(e) { document.getElementById('uploadZone').classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function handleFileSelect(e) { if (e.target.files[0]) processFile(e.target.files[0]); }
+function clearFile() {
+  uploadedFileText = '';
+  document.getElementById('fileInfo').classList.remove('show');
+  document.getElementById('file-input').value = '';
+  updateCharCount();
+}
+
+async function processFile(file) {
+  const info = document.getElementById('fileInfo');
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileSize').textContent = formatBytes(file.size);
+  info.classList.add('show');
+
+  const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+  const uploadZoneP = document.getElementById('uploadZone').querySelector('p');
+
+  try {
+    if (isPdf) {
+      uploadZoneP.textContent = '⏳ Extrayendo texto del PDF...';
+
+      // Convertir a base64 y enviar al servidor (Python local o Vercel)
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const pdf_base64 = btoa(binary);
+
+      const res = await fetch('/api/extract-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64 })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.text) throw new Error(data.error || 'Error extrayendo PDF');
+      uploadedFileText = data.text;
+      uploadZoneP.innerHTML = '<strong>Haz clic aquí</strong> o arrastra el archivo';
+    } else {
+      uploadedFileText = await file.text();
+    }
+
+    updateCharCount();
+    hideError();
+    if (uploadedFileText && uploadedFileText.length > 0) {
+      document.getElementById('fileSize').textContent =
+        formatBytes(file.size) + ' · ' + uploadedFileText.length.toLocaleString() + ' caracteres extraídos';
+    }
+  } catch(e) {
+    info.classList.remove('show');
+    uploadZoneP.innerHTML = '<strong>Haz clic aquí</strong> o arrastra el archivo';
+    showError('⚠ ' + e.message);
+  }
+}
+
+// extractPdfText definida arriba (extractor nativo sin CDN)
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+// ─── Char Count ──────────────────────────────────────────────────────────────
+function updateCharCount() {
+  const text = getInputText();
+  document.getElementById('charCount').textContent = text.length.toLocaleString() + ' caracteres';
+}
+document.getElementById('reportText').addEventListener('input', updateCharCount);
+function getInputText() {
+  return currentTab === 'text'
+    ? document.getElementById('reportText').value.trim()
+    : uploadedFileText.trim();
+}
+
+// ─── Loading Steps ───────────────────────────────────────────────────────────
+let loadingInterval = null;
+// Pasos ligados a % real de streaming
+const STEP_THRESHOLDS = [0, 15, 35, 60, 80]; // % para activar cada paso
+let currentStep = 0;
+
+function startLoadingAnimation() {
+  currentStep = 0;
+  ['step1','step2','step3','step4','step5'].forEach(s => {
+    document.getElementById(s).classList.remove('done','active');
+  });
+  document.getElementById('step1').classList.add('active');
+}
+
+function updateStreamProgress(pct) {
+  for (let i = currentStep; i < STEP_THRESHOLDS.length; i++) {
+    if (pct >= STEP_THRESHOLDS[i]) {
+      if (i > 0) {
+        document.getElementById('step' + i)?.classList.remove('active');
+        document.getElementById('step' + i)?.classList.add('done');
+      }
+      if (i + 1 <= 5) {
+        document.getElementById('step' + (i+1))?.classList.remove('done');
+        document.getElementById('step' + (i+1))?.classList.add('active');
+      }
+      currentStep = i + 1;
+    }
+  }
+}
+
+function stopLoadingAnimation() {
+  if (loadingInterval) clearInterval(loadingInterval);
+  ['step1','step2','step3','step4','step5'].forEach(s => {
+    document.getElementById(s).classList.remove('active');
+    document.getElementById(s).classList.add('done');
+  });
+}
+
+// ─── Main Analysis ───────────────────────────────────────────────────────────
+async function analyzeReport() {
+  const apiKey = getApiKey();
+  if (!apiKey) { openApiModal(); return; }
+
+  const text = getInputText();
+  if (!text || text.length < 20) {
+    showError('Por favor ingresa el texto del reporte médico (mínimo 20 caracteres).');
+    return;
+  }
+
+  // Hide previous results
+  document.getElementById('resultsSection').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'none';
+  hideError();
+
+  // Show loading
+  document.getElementById('loadingOverlay').classList.add('show');
+  document.getElementById('analyzeBtn').disabled = true;
+  startLoadingAnimation();
+
+  try {
+    const result = await callClaudeAPI(apiKey, text);
+    stopLoadingAnimation();
+    document.getElementById('loadingOverlay').classList.remove('show');
+    currentResults = result;
+    renderResults(result);
+  } catch(e) {
+    stopLoadingAnimation();
+    document.getElementById('loadingOverlay').classList.remove('show');
+    showError('Error al analizar: ' + e.message);
+    document.getElementById('emptyState').style.display = 'block';
+  } finally {
+    document.getElementById('analyzeBtn').disabled = false;
+  }
+}
+
+// ─── Claude API Call ─────────────────────────────────────────────────────────
+async function callClaudeAPI(apiKey, reportText) {
+  const systemPrompt = `Eres un experto en codificación médica (ICD-10-CM, ICD-9-CM, CPT-AMA). Analiza el reporte de imagen diagnóstica y responde SOLO con JSON válido, sin markdown ni texto adicional.
+
+Esquema requerido (completa todos los campos):
+{"patient_context":"resumen","imaging_type":"RX/TC/RMN/US/etc","body_region":"región","diagnoses":[{"id":1,"name":"nombre completo","icd10":{"code":"X00.0","description":"desc oficial"},"icd9":{"code":"000.0","description":"desc oficial"},"evidence_level":"I|II|III|IV","justification":"justificación con guía/clasificación usada"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"desc oficial CPT","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón del modificador","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"estimated_fee_range":"min-max","evidence_level":"I|II|III|IV","indication":"indicación basada en evidencia"}],"surgical_supplies":[{"cpt_code":"00000","cpt_description":"desc","supplies":[{"name":"nombre","specification":"spec técnica","category":"implant|disposable|anesthesia|instrument|other","quantity":"cant","evidence_note":"razón"}]}],"clinical_notes":"notas adicionales","references":["guía/clasificación usada"]}
+
+Reglas críticas:
+- cpt_procedures ordenados MAYOR a MENOR rvu_total
+- RVU basados en AMA RVU Schedule 2024; honorarios = rvu_total × $36.04
+- evidence_level: I=metaanálisis/RCT, II=cohorte, III=casos/expertos, IV=opinión
+- Insumos exhaustivos: implantes, osteosíntesis, suturas, drenajes, anestesia
+- Si no hay indicación quirúrgica clara, incluir CPT diagnósticos/terapéuticos más probables`;
+
+  // Truncar a 4000 chars (suficiente para cualquier reporte de imagen)
+  const truncated = reportText.length > 4000
+    ? reportText.substring(0, 4000) + '\n...[truncado]'
+    : reportText;
+
+  const payload = {
+    model: 'claude-sonnet-4-6',
+    max_tokens: 16000,
+    stream: true,
+    system: systemPrompt,
+    messages: [{ role: 'user', content:
+      `Analiza el siguiente reporte de imagen diagnóstica y proporciona la codificación médica completa en JSON:\n\n${truncated}`
+    }]
+  };
+
+  // En producción (Vercel) llama al proxy /api/analyze — la clave está en el servidor
+  const response = await fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error?.message || `HTTP ${response.status}`);
+  }
+
+  // Streaming — sin timeout, los datos llegan en tiempo real
+  const reader  = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = '';
+  let buffer   = '';
+  let charsIn  = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (raw === '[DONE]') continue;
+      try {
+        const evt = JSON.parse(raw);
+        if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+          fullText += evt.delta.text;
+          charsIn  += evt.delta.text.length;
+          updateStreamProgress(Math.min(92, Math.round(charsIn / 70)));
+        }
+      } catch(_) {}
+    }
+  }
+
+  if (!fullText) throw new Error('La API no devolvió contenido. Verifica tu conexión y créditos.');
+  return parseClaudeJSON(fullText.trim());
+}
+
+// ─── JSON Parser robusto ──────────────────────────────────────────────────────
+function parseClaudeJSON(rawText) {
+  // Estrategia 1: parseo directo
+  try { return JSON.parse(rawText); } catch(_) {}
+
+  // Estrategia 2: extraer de bloque ```json ... ```
+  const codeMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeMatch) {
+    try { return JSON.parse(codeMatch[1].trim()); } catch(_) {}
+  }
+
+  // Estrategia 3: buscar primer { hasta último }
+  const first = rawText.indexOf('{');
+  const last  = rawText.lastIndexOf('}');
+  if (first !== -1 && last > first) {
+    const candidate = rawText.slice(first, last + 1);
+    try { return JSON.parse(candidate); } catch(_) {}
+
+    // Estrategia 4: reparar JSON truncado
+    try { return JSON.parse(repairJSON(candidate)); } catch(_) {}
+  }
+
+  // Sin opciones — mostrar primeros 300 chars para diagnóstico
+  const preview = rawText.substring(0, 300).replace(/</g,'&lt;');
+  console.error('Respuesta completa de Claude:', rawText);
+  throw new Error(
+    `No se pudo procesar la respuesta de Claude.\n` +
+    `Inicio de respuesta: "${rawText.substring(0, 150)}"`
+  );
+}
+
+function repairJSON(str) {
+  // Cerrar strings no terminados
+  let result = str;
+  const openQuotes = (result.match(/(?<!\\)"/g) || []).length;
+  if (openQuotes % 2 !== 0) result += '"';
+
+  // Contar y cerrar brackets/braces abiertos
+  let opens = 0, squares = 0;
+  for (const ch of result) {
+    if (ch === '{') opens++;
+    else if (ch === '}') opens--;
+    else if (ch === '[') squares++;
+    else if (ch === ']') squares--;
+  }
+  // Cerrar coma + arrays/objects incompletos
+  result = result.replace(/,\s*$/, '');
+  result = result.replace(/,\s*([}\]])/, '$1');
+  while (squares > 0) { result += ']'; squares--; }
+  while (opens  > 0) { result += '}'; opens--;  }
+  return result;
+}
+
+// ─── Render Results ───────────────────────────────────────────────────────────
+function renderResults(data) {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultsSection').style.display = 'block';
+  document.getElementById('resultsMeta').textContent =
+    `${data.imaging_type || 'Imagen'} · ${data.body_region || ''} · ${(data.diagnoses||[]).length} diagnósticos · ${(data.cpt_procedures||[]).length} CPT`;
+
+  renderDiagnoses(data);
+  renderCPT(data);
+  renderSupplies(data);
+  renderSummary(data);
+  showPanel('diagnoses');
+}
+
+function renderDiagnoses(data) {
+  const panel = document.getElementById('panel-diagnoses');
+  if (!data.diagnoses?.length) {
+    panel.innerHTML = '<div class="empty-state"><p>No se encontraron diagnósticos</p></div>';
+    return;
+  }
+  panel.innerHTML = data.diagnoses.map((dx, i) => `
+    <div class="dx-card">
+      <div class="dx-card-header">
+        <div class="dx-num">${i+1}</div>
+        <div class="dx-name">${esc(dx.name)}</div>
+        <span class="evidence-badge ev-${dx.evidence_level?.toLowerCase()||'3'}" title="Nivel de evidencia">
+          NE: ${esc(dx.evidence_level||'III')}
+        </span>
+      </div>
+      <div class="dx-codes">
+        <div class="code-block">
+          <div class="code-system">ICD-10-CM</div>
+          <div class="code-value">${esc(dx.icd10?.code||'—')}</div>
+          <div class="code-desc">${esc(dx.icd10?.description||'')}</div>
+        </div>
+        <div class="code-block">
+          <div class="code-system">ICD-9-CM</div>
+          <div class="code-value" style="color:var(--accent3)">${esc(dx.icd9?.code||'—')}</div>
+          <div class="code-desc">${esc(dx.icd9?.description||'')}</div>
+        </div>
+      </div>
+      ${dx.justification ? `
+      <div class="dx-justif">
+        <strong>Justificación:</strong> ${esc(dx.justification)}
+      </div>` : ''}
+    </div>
+  `).join('');
+}
+
+function renderCPT(data) {
+  const panel = document.getElementById('panel-cpt');
+  if (!data.cpt_procedures?.length) {
+    panel.innerHTML = '<div class="empty-state"><p>No se encontraron procedimientos CPT</p></div>';
+    return;
+  }
+
+  // Ordenar siempre de mayor a menor honorario (rvu_total), independiente de lo que devuelva el modelo
+  const sorted = [...data.cpt_procedures].sort((a, b) => (b.rvu_total || 0) - (a.rvu_total || 0));
+  // Reasignar rank según orden real
+  sorted.forEach((c, i) => { c.rank = i + 1; });
+
+  const maxRVU = Math.max(...sorted.map(c => c.rvu_total || 0));
+
+  const rows = sorted.map((cpt, i) => {
+    const rank = i + 1;
+    const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-n';
+    const barWidth = maxRVU > 0 ? Math.max(4, (cpt.rvu_total/maxRVU)*120) : 4;
+    const mods = (cpt.modifiers||[]).map(m => `<span class="cpt-modifier">${esc(m)}</span>`).join('');
+    return `
+      <tr>
+        <td><div class="rank-badge ${rankClass}">${rank}</div></td>
+        <td>
+          <span class="cpt-code">${esc(cpt.code)}</span>${mods}
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(cpt.description||'')}</div>
+        </td>
+        <td>
+          <div class="rvu-bar-wrap">
+            <div class="rvu-bar" style="width:${barWidth}px"></div>
+            <span class="rvu-val">${cpt.rvu_total?.toFixed(2)||'—'}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">
+            W:${cpt.rvu_work||0} · PE:${cpt.rvu_practice||0} · M:${cpt.rvu_malpractice||0}
+          </div>
+        </td>
+        <td>
+          <div class="fee-val">$${(cpt.estimated_fee_usd||0).toLocaleString()}</div>
+          ${cpt.estimated_fee_range ? `<div style="font-size:11px;color:var(--muted)">$${esc(cpt.estimated_fee_range)}</div>` : ''}
+        </td>
+        <td><span class="evidence-badge ev-${(cpt.evidence_level||'III').toLowerCase()}" style="font-size:10px">NE: ${esc(cpt.evidence_level||'III')}</span></td>
+        <td style="max-width:200px">
+          ${cpt.modifier_justification ? `<div style="font-size:11px;color:var(--muted)">${esc(cpt.modifier_justification)}</div>` : '—'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  panel.innerHTML = `
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="cpt-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Código CPT · Descripción</th>
+              <th>RVU Total</th>
+              <th>Honorario Est.</th>
+              <th>NE</th>
+              <th>Modificadores</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+    ${sorted[0]?.indication ? `
+    <div class="card" style="margin-top:16px">
+      <div class="section-title">Indicaciones Clínicas</div>
+      ${sorted.map(c => c.indication ? `
+        <div style="margin-bottom:10px">
+          <span style="font-family:monospace;color:var(--accent);font-weight:700">${esc(c.code)}</span>
+          <span style="font-size:13px;color:var(--muted);margin-left:8px">${esc(c.indication)}</span>
+        </div>
+      ` : '').join('')}
+    </div>` : ''}
+  `;
+}
+
+function renderSupplies(data) {
+  const panel = document.getElementById('panel-supplies');
+  if (!data.surgical_supplies?.length) {
+    panel.innerHTML = '<div class="empty-state"><p>No se encontraron insumos</p></div>';
+    return;
+  }
+
+  const catMap = {implant:'cat-implant',disposable:'cat-disposable',anesthesia:'cat-anesthesia',instrument:'cat-instrument',other:'cat-other'};
+  const catLabel = {implant:'Implante',disposable:'Descartable',anesthesia:'Anestesia',instrument:'Instrumental',other:'Otro'};
+
+  panel.innerHTML = data.surgical_supplies.map(group => `
+    <div class="supply-group">
+      <div class="supply-group-header">
+        <span class="supply-group-cpt">${esc(group.cpt_code)}</span>
+        <span class="supply-group-name">${esc(group.cpt_description||'')}</span>
+      </div>
+      <div class="supply-grid">
+        ${(group.supplies||[]).map(s => `
+          <div class="supply-item">
+            <div class="supply-cat-dot ${catMap[s.category]||'cat-other'}" title="${catLabel[s.category]||'Otro'}"></div>
+            <div>
+              <div class="supply-name">${esc(s.name)}</div>
+              ${s.specification ? `<div class="supply-spec">${esc(s.specification)}</div>` : ''}
+              ${s.quantity ? `<div class="supply-qty">${esc(s.quantity)}</div>` : ''}
+              ${s.evidence_note ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">${esc(s.evidence_note)}</div>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderSummary(data) {
+  const panel = document.getElementById('panel-summary');
+  const totalRVU = (data.cpt_procedures||[]).reduce((s,c) => s+(c.rvu_total||0), 0);
+  const totalFee = (data.cpt_procedures||[]).reduce((s,c) => s+(c.estimated_fee_usd||0), 0);
+  const totalSupplies = (data.surgical_supplies||[]).reduce((s,g) => s+(g.supplies||[]).length, 0);
+
+  panel.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px">
+      ${[
+        ['🩺','Diagnósticos',(data.diagnoses||[]).length,'diagnósticos identificados'],
+        ['📋','Procedimientos CPT',(data.cpt_procedures||[]).length,'códigos asignados'],
+        ['⚡','RVU Total',totalRVU.toFixed(2),'unidades de valor relativo'],
+        ['💵','Honorario Est.','$'+totalFee.toLocaleString(),'USD (cirujano)'],
+        ['🏪','Insumos',totalSupplies,'ítems listados'],
+      ].map(([icon,label,val,sub]) => `
+        <div class="card" style="text-align:center;padding:20px 16px">
+          <div style="font-size:28px;margin-bottom:8px">${icon}</div>
+          <div style="font-size:24px;font-weight:700;color:var(--accent)">${val}</div>
+          <div style="font-size:13px;font-weight:600;margin:4px 0">${label}</div>
+          <div style="font-size:11px;color:var(--muted)">${sub}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    ${data.patient_context ? `
+    <div class="card">
+      <div class="section-title">Resumen del Caso</div>
+      <p style="font-size:14px;line-height:1.7;color:var(--muted)">${esc(data.patient_context)}</p>
+    </div>` : ''}
+
+    ${data.clinical_notes ? `
+    <div class="card" style="margin-top:16px">
+      <div class="section-title">Notas Clínicas</div>
+      <p style="font-size:14px;line-height:1.7;color:var(--muted)">${esc(data.clinical_notes)}</p>
+    </div>` : ''}
+
+    ${data.references?.length ? `
+    <div class="card" style="margin-top:16px">
+      <div class="section-title">Referencias y Clasificaciones Utilizadas</div>
+      <ul style="list-style:none;padding:0">
+        ${data.references.map(r => `
+          <li style="font-size:13px;color:var(--muted);padding:5px 0;border-bottom:1px solid var(--border)">
+            📎 ${esc(r)}
+          </li>
+        `).join('')}
+      </ul>
+    </div>` : ''}
+
+    <div class="card" style="margin-top:16px;background:rgba(247,168,79,0.05);border-color:rgba(247,168,79,0.2)">
+      <p style="font-size:12px;color:var(--muted);line-height:1.6">
+        ⚠️ <strong style="color:var(--accent3)">Aviso Legal:</strong> Los códigos y honorarios generados son orientativos y deben ser validados por un profesional médico certificado en codificación. Los valores de honorarios están basados en el AMA RVU Schedule con factor de conversión Medicare 2024 (~$36.04/RVU) y pueden variar según el país, institución y tarifario aplicable.
+      </p>
+    </div>
+  `;
+}
+
+// ─── Panel Navigation ─────────────────────────────────────────────────────────
+function showPanel(name) {
+  document.querySelectorAll('.res-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.res-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  const tabs = document.querySelectorAll('.res-tab');
+  const panelNames = ['diagnoses','cpt','supplies','summary'];
+  const idx = panelNames.indexOf(name);
+  if (idx >= 0 && tabs[idx]) tabs[idx].classList.add('active');
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  box.textContent = '⚠ ' + msg;
+  box.style.display = 'block';
+}
+function hideError() { document.getElementById('errorBox').style.display = 'none'; }
+
+function clearResults() {
+  document.getElementById('resultsSection').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'block';
+  currentResults = null;
+}
+
+// ─── Exportar PDF ─────────────────────────────────────────────────────────────
+function exportPDF() {
+  if (!currentResults) return;
+  const d = currentResults;
+  const win = window.open('', '_blank');
+  win.document.write(buildPrintHTML(d));
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 600);
+}
+
+// ─── Exportar Word ────────────────────────────────────────────────────────────
+function exportWord() {
+  if (!currentResults) return;
+  const d = currentResults;
+  const html = buildPrintHTML(d, true);
+  const blob = new Blob(['﻿' + html], {
+    type: 'application/msword;charset=utf-8'
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'codificacion_medica_' + new Date().toISOString().slice(0,10) + '.doc';
+  a.click();
+}
+
+// ─── HTML compartido para PDF y Word ─────────────────────────────────────────
+function buildPrintHTML(d, forWord = false) {
+  const sorted = [...(d.cpt_procedures||[])].sort((a,b)=>(b.rvu_total||0)-(a.rvu_total||0));
+  const totalFee = sorted.reduce((s,c)=>s+(c.estimated_fee_usd||0),0);
+  const totalRVU = sorted.reduce((s,c)=>s+(c.rvu_total||0),0);
+  const date = new Date().toLocaleDateString('es', {year:'numeric',month:'long',day:'numeric'});
+
+  const wordMeta = forWord ? `
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml>` : '';
+
+  // ── Diagnósticos ──
+  const dxRows = (d.diagnoses||[]).map((dx,i) => `
+    <tr>
+      <td style="text-align:center;font-weight:bold">${i+1}</td>
+      <td>${dx.name||''}</td>
+      <td style="font-family:monospace;color:#1a56db;font-weight:bold">${dx.icd10?.code||'—'}</td>
+      <td style="font-size:11px;color:#555">${dx.icd10?.description||''}</td>
+      <td style="font-family:monospace;color:#b45309">${dx.icd9?.code||'—'}</td>
+      <td style="text-align:center">${dx.evidence_level||'—'}</td>
+    </tr>
+    ${dx.justification ? `<tr><td></td><td colspan="5" style="font-size:11px;color:#666;padding:4px 8px 10px;border-bottom:1px solid #e5e7eb"><em>📎 ${dx.justification}</em></td></tr>` : ''}
+  `).join('');
+
+  // ── CPT ──
+  const cptRows = sorted.map((c,i) => `
+    <tr>
+      <td style="text-align:center;font-weight:bold">${i+1}</td>
+      <td style="font-family:monospace;color:#1a56db;font-weight:bold">${c.code||''}${(c.modifiers||[]).map(m=>`<span style="color:#b45309;margin-left:4px">${m}</span>`).join('')}</td>
+      <td style="font-size:11px">${c.description||''}</td>
+      <td style="text-align:right;font-weight:bold">${(c.rvu_total||0).toFixed(2)}</td>
+      <td style="text-align:right;font-weight:bold;color:#065f46">$${(c.estimated_fee_usd||0).toLocaleString()}</td>
+      <td style="font-size:10px;color:#555">${c.modifier_justification||'—'}</td>
+      <td style="text-align:center;font-size:11px">${c.evidence_level||'—'}</td>
+    </tr>
+  `).join('');
+
+  // ── Insumos ──
+  const suppliesHTML = (d.surgical_supplies||[]).map(g => {
+    const items = (g.supplies||[]).map(s => `
+      <tr>
+        <td style="font-size:12px">${s.name||''}</td>
+        <td style="font-size:11px;color:#555">${s.specification||''}</td>
+        <td style="font-size:11px;text-transform:capitalize">${s.category||''}</td>
+        <td style="font-size:11px;text-align:center">${s.quantity||''}</td>
+      </tr>`).join('');
+    return `
+      <h4 style="margin:16px 0 6px;color:#1a56db;font-size:13px">
+        CPT ${g.cpt_code} — ${g.cpt_description||''}
+      </h4>
+      <table width="100%" cellspacing="0" style="border-collapse:collapse;font-size:12px;margin-bottom:8px">
+        <thead><tr style="background:#f1f5f9">
+          <th>Insumo</th><th>Especificación</th>
+          <th>Categoría</th><th>Cantidad</th>
+        </tr></thead>
+        <tbody>${items}</tbody>
+      </table>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="es">
+<head><meta charset="utf-8">${wordMeta}
+<style>
+  body{font-family:Arial,sans-serif;font-size:13px;color:#1e293b;margin:2cm;line-height:1.5}
+  h1{font-size:20px;color:#1e40af;border-bottom:3px solid #1e40af;padding-bottom:8px;margin-bottom:4px}
+  h2{font-size:15px;color:#1e40af;margin:22px 0 8px;border-left:4px solid #1e40af;padding-left:10px}
+  h3{font-size:13px;margin:14px 0 6px}
+  table{width:100%;border-collapse:collapse;margin-bottom:8px}
+  th{padding:7px 10px;background:#1e40af;color:#fff;text-align:left;font-size:11px;text-transform:uppercase}
+  td{padding:7px 10px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+  tr:nth-child(even) td{background:#f8fafc}
+  .meta{font-size:12px;color:#64748b;margin-bottom:18px}
+  .summary-box{display:inline-block;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:10px 18px;margin:4px;text-align:center}
+  .summary-box strong{display:block;font-size:18px;color:#1e40af}
+  .note{background:#fefce8;border:1px solid #fde047;border-radius:6px;padding:10px 14px;font-size:12px;color:#713f12;margin-top:16px}
+  @media print{body{margin:1cm}}
+</style>
+</head>
+<body>
+<h1>🏥 Codificación Médica — ICD · CPT · Insumos</h1>
+<p class="meta">
+  <strong>${d.imaging_type||'Imagen Diagnóstica'}</strong> &nbsp;·&nbsp;
+  ${d.body_region||''} &nbsp;·&nbsp;
+  Generado: ${date}
+</p>
+
+${d.patient_context ? `<p style="background:#eff6ff;border-left:4px solid #3b82f6;padding:10px 14px;border-radius:0 6px 6px 0;font-size:13px">${d.patient_context}</p>` : ''}
+
+<!-- RESUMEN -->
+<div style="margin:16px 0">
+  <div class="summary-box"><strong>${(d.diagnoses||[]).length}</strong>Diagnósticos</div>
+  <div class="summary-box"><strong>${sorted.length}</strong>Procedimientos CPT</div>
+  <div class="summary-box"><strong>${totalRVU.toFixed(2)}</strong>RVU Total</div>
+  <div class="summary-box"><strong>$${totalFee.toLocaleString()}</strong>Honorario Est. USD</div>
+</div>
+
+<!-- DIAGNÓSTICOS -->
+<h2>🩺 Diagnósticos e Identificación de Códigos ICD</h2>
+<table>
+  <thead><tr>
+    <th width="4%">#</th>
+    <th width="28%">Diagnóstico</th>
+    <th width="10%">ICD-10</th>
+    <th width="26%">Descripción ICD-10</th>
+    <th width="10%">ICD-9</th>
+    <th width="8%">N.E.</th>
+  </tr></thead>
+  <tbody>${dxRows}</tbody>
+</table>
+
+<!-- CPT -->
+<h2>💊 Procedimientos CPT — Ordenados por Honorario Descendente</h2>
+<table>
+  <thead><tr>
+    <th width="4%">#</th>
+    <th width="10%">CPT</th>
+    <th width="28%">Descripción</th>
+    <th width="8%">RVU</th>
+    <th width="10%">Honorario</th>
+    <th width="28%">Justif. Modificador</th>
+    <th width="8%">N.E.</th>
+  </tr></thead>
+  <tbody>${cptRows}</tbody>
+</table>
+
+<!-- INSUMOS -->
+<h2>🏪 Insumos Quirúrgicos por Procedimiento</h2>
+${suppliesHTML}
+
+<!-- NOTAS -->
+${d.clinical_notes ? `<h2>📝 Notas Clínicas</h2><p style="font-size:13px;color:#374151">${d.clinical_notes}</p>` : ''}
+${d.references?.length ? `<h2>📚 Referencias</h2><ul style="font-size:12px;color:#555">${d.references.map(r=>`<li>${r}</li>`).join('')}</ul>` : ''}
+
+<div class="note">
+  ⚠ <strong>Aviso Legal:</strong> Los códigos y honorarios son orientativos. Deben ser validados por un profesional certificado en codificación médica. Honorarios basados en AMA RVU Schedule 2024 (CF ~$36.04/RVU).
+</div>
+</body></html>`;
+}
+
+function exportJSON() {
+  if (!currentResults) return;
+  const blob = new Blob([JSON.stringify(currentResults, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'codificacion_medica_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+updateApiBadge();
+</script>
+</body>
+</html>
