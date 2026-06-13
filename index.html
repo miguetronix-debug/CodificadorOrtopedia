@@ -860,26 +860,24 @@ async function analyzeReport() {
 
 // ─── Claude API Call ──────────────────────────────────────────────────────────
 async function callClaudeAPI(reportText) {
-  const systemPrompt = `Eres un experto en codificación médica (ICD-10-CM, ICD-9-CM, CPT-AMA) con especialización en traumatología, ortopedia y cirugía. Analiza el reporte de imagen diagnóstica y responde SOLO con JSON válido, sin markdown ni texto adicional. El primer carácter de tu respuesta debe ser '{' y el último '}'.
+  const systemPrompt = `Eres un experto en codificación médica ICD-10-CM, ICD-9-CM y CPT-AMA especializado en traumatología y ortopedia. Responde ÚNICAMENTE con JSON válido. El PRIMER carácter de tu respuesta debe ser '{' y el ÚLTIMO '}'. Sin markdown, sin backticks, sin texto fuera del JSON.
 
-Esquema requerido:
-{"patient_context":"resumen clínico","imaging_type":"RX/TC/RMN/US/etc","body_region":"región anatómica","diagnoses":[{"id":1,"name":"nombre diagnóstico completo","icd10":{"code":"X00.0","description":"descripción oficial ICD-10-CM"},"icd9":{"code":"000.0","description":"descripción oficial ICD-9-CM"},"evidence_level":"I|II|III|IV","justification":"clasificación usada: AO, Gustilo, Neer, Schatzker, Garden, etc"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"descripción oficial CPT","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón del modificador","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"estimated_fee_range":"min-max","evidence_level":"I|II|III|IV","indication":"indicación clínica"}],"surgical_supplies":[{"cpt_code":"00000","cpt_description":"descripción","supplies":[{"name":"nombre insumo","specification":"especificación técnica: talla, material, marca referencial","category":"implant|disposable|anesthesia|instrument|other","quantity":"cantidad y unidad","evidence_note":"guía o protocolo que lo avala"}]}],"clinical_notes":"notas relevantes","references":["guía utilizada"]}
+Esquema:
+{"patient_context":"resumen breve","imaging_type":"modalidad","body_region":"región","diagnoses":[{"id":1,"name":"diagnóstico","icd10":{"code":"X00.0","description":"desc oficial"},"icd9":{"code":"000.0","description":"desc oficial"},"evidence_level":"I|II|III|IV","justification":"clasificación AO/Gustilo/Neer/etc"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"desc CPT","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón breve","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"evidence_level":"I|II|III|IV","indication":"indicación breve"}],"surgical_supplies":[{"cpt_code":"00000","cpt_description":"desc","supplies":[{"name":"insumo","specification":"talla/material/marca","category":"implant|disposable|anesthesia|instrument|other","quantity":"cant+unidad","evidence_note":"guía"}]}],"clinical_notes":"notas","references":["ref"]}
 
-Reglas:
-- cpt_procedures ordenados MAYOR a MENOR rvu_total
-- RVU según AMA RVU Schedule 2024; honorario = rvu_total × $36.04
-- Incluir TODOS los CPT: procedimiento principal, secundarios, diagnósticos, terapéuticos, cierre, anestesia regional si aplica
-- Si hay múltiples diagnósticos, incluir CPT para cada uno
-- NO omitir códigos CPT por brevedad
-- Insumos por CPT: implantes, osteosíntesis, suturas (con calibre), drenajes, anestesia, instrumental especial, tourniquet, fluoroscopia si aplica
-- evidence_level: I=metaanálisis/RCT, II=cohorte, III=serie/expertos, IV=opinión`;
+REGLAS CRÍTICAS — sé BREVE en textos pero EXHAUSTIVO en cantidad de códigos:
+- CPT ordenados MAYOR a MENOR rvu_total. RVU × $36.04 = honorario (AMA 2024)
+- Incluir TODOS los CPT aplicables: procedimiento principal, adicionales, diagnósticos, terapéuticos, cierre, artroscopia, fijación, injerto, anestesia regional
+- Por cada diagnóstico incluir CPT específicos
+- Insumos por CPT: implantes, tornillos, suturas+calibre, drenajes, anestesia, instrumental, tourniquet si aplica
+- Textos descriptivos: máximo 1 oración. La exhaustividad en CANTIDAD es la prioridad`;
 
   const truncated = reportText.length > 4000
     ? reportText.substring(0, 4000) + '\n...[truncado]'
     : reportText;
 
   const payload = {
-    model: 'claude-sonnet-4-6',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 8000,
     stream: true,
     system: systemPrompt,
