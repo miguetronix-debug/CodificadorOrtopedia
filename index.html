@@ -962,7 +962,7 @@ Reglas críticas:
 
   const payload = {
     model: 'claude-sonnet-4-6',
-    max_tokens: 16000,
+    max_tokens: 8000,
     stream: true,
     system: systemPrompt,
     messages: [{ role: 'user', content: buildUserPrompt(truncated) }]
@@ -1008,8 +1008,8 @@ CRÍTICO: tu respuesta debe comenzar DIRECTAMENTE con '{' sin backticks, sin mar
   }
 
   const payload = {
-    model: 'claude-sonnet-4-6',
-    max_tokens: 16000,
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 6000,
     stream: true,
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }]

@@ -1,15 +1,24 @@
-// Vercel Serverless Function — proxy a Anthropic API con soporte streaming
-// Cambiado de Edge a Serverless para soportar modelos lentos (Opus) sin timeout
+// Vercel Edge Function — proxy a Anthropic API con soporte streaming
+export const config = { runtime: 'edge' };
 
-module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+export default async function handler(req) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
+    });
+  }
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  }
 
   try {
+    const body = await req.json();
+
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -17,29 +26,21 @@ module.exports = async function handler(req, res) {
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(body),
     });
 
-    // Replicar status y content-type de Anthropic
-    res.status(anthropicRes.status);
-    res.setHeader('Content-Type', anthropicRes.headers.get('Content-Type') || 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('X-Accel-Buffering', 'no');
-
-    // Pipe streaming SSE directamente al cliente
-    const reader = anthropicRes.body.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      res.write(value);
-    }
-    res.end();
-
+    return new Response(anthropicRes.body, {
+      status: anthropicRes.status,
+      headers: {
+        'Content-Type': anthropicRes.headers.get('Content-Type') || 'text/event-stream',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache',
+      },
+    });
   } catch (err) {
-    if (!res.headersSent) {
-      res.status(500).json({ error: { message: err.message } });
-    } else {
-      res.end();
-    }
+    return new Response(
+      JSON.stringify({ error: { message: err.message } }),
+      { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+    );
   }
-};
+}
