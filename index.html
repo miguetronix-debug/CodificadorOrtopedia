@@ -469,7 +469,7 @@ Hallazgos: Se evidencia ruptura completa del ligamento cruzado anterior..."></te
   <div class="loading-overlay" id="loadingOverlay">
     <div class="spinner"></div>
     <p style="font-size:16px;font-weight:600;margin-bottom:8px">Analizando diagnósticos y CPT... <span style="font-size:12px;font-weight:400;opacity:0.7">(fase 1/2)</span></p>
-    <p>Codificación exhaustiva en proceso — puede tomar hasta 30 segundos</p>
+    <p>Codificación exhaustiva con Claude Opus — puede tomar 1-2 minutos</p>
     <p id="streamCounter" style="font-size:12px;color:var(--accent);margin-top:6px;font-family:monospace"></p>
     <div class="loading-steps">
       <div class="loading-step" id="step1"><div class="step-dot"></div>Extrayendo diagnósticos del reporte</div>
@@ -960,8 +960,8 @@ Reglas críticas:
     : reportText;
 
   const payload = {
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 8000,
+    model: 'claude-opus-4-6',
+    max_tokens: 16000,
     stream: true,
     system: systemPrompt,
     messages: [{ role: 'user', content: buildUserPrompt(truncated) }]
@@ -1006,8 +1006,8 @@ Lista según estándares internacionales (AAOS, AO Foundation, SICOT).`;
   }
 
   const payload = {
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 8000,
+    model: 'claude-opus-4-6',
+    max_tokens: 16000,
     stream: true,
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }]

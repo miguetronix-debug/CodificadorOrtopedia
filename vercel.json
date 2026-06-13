@@ -1,1 +1,10 @@
-{}
+{
+  "functions": {
+    "api/analyze.js": {
+      "maxDuration": 300
+    },
+    "api/extract-pdf.js": {
+      "maxDuration": 30
+    }
+  }
+}
