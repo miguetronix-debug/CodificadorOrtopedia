@@ -468,15 +468,15 @@ Hallazgos: Se evidencia ruptura completa del ligamento cruzado anterior..."></te
   <!-- LOADING -->
   <div class="loading-overlay" id="loadingOverlay">
     <div class="spinner"></div>
-    <p style="font-size:16px;font-weight:600;margin-bottom:8px">Analizando diagnósticos y CPT... <span style="font-size:12px;font-weight:400;opacity:0.7">(fase 1/2)</span></p>
-    <p>Codificación exhaustiva con Claude Sonnet — puede tomar 30-60 segundos</p>
+    <p style="font-size:16px;font-weight:600;margin-bottom:8px">Analizando reporte médico...</p>
+    <p>Claude está procesando diagnósticos, CPT e insumos — puede tomar hasta 40 segundos</p>
     <p id="streamCounter" style="font-size:12px;color:var(--accent);margin-top:6px;font-family:monospace"></p>
     <div class="loading-steps">
       <div class="loading-step" id="step1"><div class="step-dot"></div>Extrayendo diagnósticos del reporte</div>
       <div class="loading-step" id="step2"><div class="step-dot"></div>Asignando códigos ICD-9 e ICD-10</div>
       <div class="loading-step" id="step3"><div class="step-dot"></div>Buscando códigos CPT relacionados</div>
       <div class="loading-step" id="step4"><div class="step-dot"></div>Calculando honorarios y RVU</div>
-      <div class="loading-step" id="step5"><div class="step-dot"></div>Finalizando fase 1...</div>
+      <div class="loading-step" id="step5"><div class="step-dot"></div>Generando lista de insumos</div>
     </div>
   </div>
 
@@ -827,7 +827,7 @@ function stopLoadingAnimation() {
   });
 }
 
-// ─── Main Analysis (dos fases) ───────────────────────────────────────────────
+// ─── Main Analysis ────────────────────────────────────────────────────────────
 async function analyzeReport() {
   const text = getInputText();
   if (!text || text.length < 20) {
@@ -843,44 +843,11 @@ async function analyzeReport() {
   startLoadingAnimation();
 
   try {
-    // ── FASE 1: Diagnósticos + CPT (~8-12s) ─────────────────────────────────
-    const phase1 = await callPhase1API(text);
-
-    // Mostrar resultados de fase 1 de inmediato
+    const result = await callClaudeAPI(text);
     stopLoadingAnimation();
     document.getElementById('loadingOverlay').classList.remove('show');
-    phase1.surgical_supplies = [];
-    currentResults = phase1;
-    renderResults(phase1);
-    showPanel('diagnoses');
-
-    // Indicador de carga inline en panel de insumos
-    if (phase1.cpt_procedures?.length) {
-      document.getElementById('panel-supplies').innerHTML = `
-        <div style="text-align:center;padding:56px 24px;color:var(--muted)">
-          <div class="spinner" style="width:36px;height:36px;border-width:3px;margin:0 auto 18px"></div>
-          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px">Generando lista de insumos...</div>
-          <div style="font-size:13px">Los diagnósticos y códigos CPT ya están disponibles</div>
-        </div>`;
-
-      // ── FASE 2: Insumos quirúrgicos (segundo plano, ~8-12s) ───────────────
-      try {
-        const phase2 = await callPhase2API(text, phase1.cpt_procedures);
-        phase1.surgical_supplies = phase2.surgical_supplies || [];
-        currentResults = phase1;
-        renderSupplies(phase1);
-        renderSummary(phase1);
-      } catch(e2) {
-        document.getElementById('panel-supplies').innerHTML = `
-          <div style="text-align:center;padding:40px 24px;color:#e74c3c">
-            <div style="font-size:24px;margin-bottom:10px">⚠</div>
-            <div style="font-weight:600">No se pudo generar la lista de insumos</div>
-            <div style="font-size:12px;margin-top:8px;color:var(--muted)">${esc(e2.message)}</div>
-            <div style="font-size:12px;margin-top:4px;color:var(--muted)">Los diagnósticos y CPT están disponibles en las demás pestañas</div>
-          </div>`;
-      }
-    }
-
+    currentResults = result;
+    renderResults(result);
   } catch(e) {
     stopLoadingAnimation();
     document.getElementById('loadingOverlay').classList.remove('show');
@@ -891,8 +858,34 @@ async function analyzeReport() {
   }
 }
 
-// ─── Streaming API helper ─────────────────────────────────────────────────────
-async function streamAPI(payload, showProgress) {
+// ─── Claude API Call ──────────────────────────────────────────────────────────
+async function callClaudeAPI(reportText) {
+  const systemPrompt = `Eres un experto en codificación médica (ICD-10-CM, ICD-9-CM, CPT-AMA) con especialización en traumatología, ortopedia y cirugía. Analiza el reporte de imagen diagnóstica y responde SOLO con JSON válido, sin markdown ni texto adicional. El primer carácter de tu respuesta debe ser '{' y el último '}'.
+
+Esquema requerido:
+{"patient_context":"resumen clínico","imaging_type":"RX/TC/RMN/US/etc","body_region":"región anatómica","diagnoses":[{"id":1,"name":"nombre diagnóstico completo","icd10":{"code":"X00.0","description":"descripción oficial ICD-10-CM"},"icd9":{"code":"000.0","description":"descripción oficial ICD-9-CM"},"evidence_level":"I|II|III|IV","justification":"clasificación usada: AO, Gustilo, Neer, Schatzker, Garden, etc"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"descripción oficial CPT","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón del modificador","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"estimated_fee_range":"min-max","evidence_level":"I|II|III|IV","indication":"indicación clínica"}],"surgical_supplies":[{"cpt_code":"00000","cpt_description":"descripción","supplies":[{"name":"nombre insumo","specification":"especificación técnica: talla, material, marca referencial","category":"implant|disposable|anesthesia|instrument|other","quantity":"cantidad y unidad","evidence_note":"guía o protocolo que lo avala"}]}],"clinical_notes":"notas relevantes","references":["guía utilizada"]}
+
+Reglas:
+- cpt_procedures ordenados MAYOR a MENOR rvu_total
+- RVU según AMA RVU Schedule 2024; honorario = rvu_total × $36.04
+- Incluir TODOS los CPT: procedimiento principal, secundarios, diagnósticos, terapéuticos, cierre, anestesia regional si aplica
+- Si hay múltiples diagnósticos, incluir CPT para cada uno
+- NO omitir códigos CPT por brevedad
+- Insumos por CPT: implantes, osteosíntesis, suturas (con calibre), drenajes, anestesia, instrumental especial, tourniquet, fluoroscopia si aplica
+- evidence_level: I=metaanálisis/RCT, II=cohorte, III=serie/expertos, IV=opinión`;
+
+  const truncated = reportText.length > 4000
+    ? reportText.substring(0, 4000) + '\n...[truncado]'
+    : reportText;
+
+  const payload = {
+    model: 'claude-sonnet-4-6',
+    max_tokens: 8000,
+    stream: true,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: buildUserPrompt(truncated) }]
+  };
+
   const response = await fetch('/api/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -925,11 +918,9 @@ async function streamAPI(payload, showProgress) {
         if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
           fullText += evt.delta.text;
           charsIn  += evt.delta.text.length;
-          if (showProgress) {
-            updateStreamProgress(Math.min(92, Math.round(charsIn / 50)));
-            const counter = document.getElementById('streamCounter');
-            if (counter) counter.textContent = `⟳ Recibiendo respuesta... ${charsIn.toLocaleString()} caracteres`;
-          }
+          updateStreamProgress(Math.min(92, Math.round(charsIn / 60)));
+          const counter = document.getElementById('streamCounter');
+          if (counter) counter.textContent = `⟳ Recibiendo respuesta... ${charsIn.toLocaleString()} caracteres`;
         }
       } catch(_) {}
     }
@@ -937,85 +928,6 @@ async function streamAPI(payload, showProgress) {
 
   if (!fullText) throw new Error('La API no devolvió contenido. Verifica tu conexión y créditos.');
   return parseClaudeJSON(fullText.trim());
-}
-
-// ─── Fase 1: Diagnósticos + CPT ──────────────────────────────────────────────
-async function callPhase1API(reportText) {
-  const systemPrompt = `Eres un experto en codificación médica (ICD-10-CM, ICD-9-CM, CPT-AMA) con especialización en traumatología, ortopedia y cirugía. Analiza el reporte de imagen diagnóstica y responde SOLO con JSON válido, sin markdown ni texto adicional.
-
-Esquema requerido (completa TODOS los campos con máximo detalle):
-{"patient_context":"resumen clínico completo","imaging_type":"RX/TC/RMN/US/etc","body_region":"región anatómica específica","diagnoses":[{"id":1,"name":"nombre diagnóstico completo y específico","icd10":{"code":"X00.0","description":"descripción oficial ICD-10-CM"},"icd9":{"code":"000.0","description":"descripción oficial ICD-9-CM"},"evidence_level":"I|II|III|IV","justification":"justificación detallada con guía/clasificación/sistema usado (AO, Gustilo, Garden, Neer, Schatzker, etc)"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"descripción oficial CPT completa","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón clínica y técnica del modificador","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"estimated_fee_range":"min-max","evidence_level":"I|II|III|IV","indication":"indicación clínica detallada basada en evidencia"}],"clinical_notes":"notas clínicas adicionales relevantes","references":["guía/clasificación/sociedad científica usada"]}
-
-Reglas críticas:
-- cpt_procedures ordenados MAYOR a MENOR rvu_total
-- RVU basados en AMA RVU Schedule 2024; honorarios = rvu_total × $36.04
-- Incluir TODOS los CPT aplicables: procedimiento principal, procedimientos adicionales, diagnósticos, terapéuticos, artroscopias, reducciones, fijaciones, injertos, colgajos, cierre de heridas
-- Si hay múltiples diagnósticos, incluir CPT específicos para cada uno
-- Si no hay indicación quirúrgica clara, incluir CPT diagnósticos/terapéuticos conservadores más probables
-- NO omitir códigos por brevedad — la exhaustividad es prioritaria
-- evidence_level: I=metaanálisis/RCT, II=cohorte prospectiva, III=casos/series/expertos, IV=opinión experta
-- CRÍTICO: tu respuesta debe comenzar DIRECTAMENTE con el carácter '{' sin ningún texto previo, sin backticks, sin markdown. El último carácter debe ser '}'`;
-
-  const truncated = reportText.length > 4000
-    ? reportText.substring(0, 4000) + '\n...[truncado]'
-    : reportText;
-
-  const payload = {
-    model: 'claude-sonnet-4-6',
-    max_tokens: 8000,
-    stream: true,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: buildUserPrompt(truncated) }]
-  };
-
-  return await streamAPI(payload, true);
-}
-
-// ─── Fase 2: Insumos quirúrgicos ─────────────────────────────────────────────
-async function callPhase2API(reportText, cptProcedures) {
-  const cptList = (cptProcedures || [])
-    .map(c => `CPT ${c.code}: ${c.description} (RVU: ${c.rvu_total || 0})`)
-    .join('\n');
-
-  const extra = getExtraInstructions();
-
-  const systemPrompt = `Eres un experto en insumos, materiales e implantes quirúrgicos con conocimiento profundo en traumatología, ortopedia y cirugía. Genera la lista COMPLETA y EXHAUSTIVA de insumos quirúrgicos para cada procedimiento CPT indicado. Responde SOLO con JSON válido, sin markdown:
-
-{"surgical_supplies":[{"cpt_code":"00000","cpt_description":"descripción completa","supplies":[{"name":"nombre exacto del insumo","specification":"especificación técnica detallada: talla, material, calibre, longitud, marca referencial, código de catálogo si aplica","category":"implant|disposable|anesthesia|instrument|other","quantity":"cantidad exacta y unidad (ej: 1 sistema, 4 tornillos, 2 metros)","evidence_note":"justificación basada en evidencia: guía clínica, protocolo quirúrgico o sociedad científica que lo avala"}]}]}
-
-Para cada CPT incluir SIN EXCEPCIÓN:
-- Implantes principales (placa, clavo, prótesis, tornillos de fijación)
-- Material de osteosíntesis completo (tornillos corticales/esponjosos, agujas K, cerclajes)
-- Sistema de lavado pulsátil si aplica
-- Injertos (autólogo, aloinjerto, sustituto óseo — indicar tipo)
-- Suturas: absorbibles (Vicryl, PDS) y no absorbibles (Prolene, Ethibond) con calibre
-- Drenajes (Hemovac, Jackson-Pratt — indicar French y cantidad)
-- Material anestésico: anestesia general + bloqueo regional (tipo, droga, catéter si es continuo)
-- Instrumental especial: set de artroscopia, motor para fresado, radiofrecuencia, etc
-- Material de vendaje y cierre: apósitos, férulas, yesos
-- Tourniquet neumático si aplica
-- Electrocauterio, campo quirúrgico, equipo de fluoroscopia intraoperatoria
-Lista según estándares internacionales (AAOS, AO Foundation, SICOT).
-CRÍTICO: tu respuesta debe comenzar DIRECTAMENTE con '{' sin backticks, sin markdown, sin texto previo. El último carácter debe ser '}'`;
-
-  const truncated = reportText.length > 2000
-    ? reportText.substring(0, 2000) + '\n...'
-    : reportText;
-
-  let userContent = `Procedimientos CPT indicados:\n${cptList}\n\nContexto clínico (reporte de imagen):\n${truncated}`;
-  if (extra) {
-    userContent += `\n\n---\nINSTRUCCIONES ADICIONALES DEL MÉDICO (aplica con prioridad):\n${extra}`;
-  }
-
-  const payload = {
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 6000,
-    stream: true,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userContent }]
-  };
-
-  return await streamAPI(payload, false);
 }
 
 // ─── Constructor de prompt con instrucciones extra ───────────────────────────
