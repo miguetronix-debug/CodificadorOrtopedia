@@ -476,7 +476,7 @@ Hallazgos: Se evidencia ruptura completa del ligamento cruzado anterior..."></te
       <div class="loading-step" id="step2"><div class="step-dot"></div>Asignando códigos ICD-9 e ICD-10</div>
       <div class="loading-step" id="step3"><div class="step-dot"></div>Buscando códigos CPT relacionados</div>
       <div class="loading-step" id="step4"><div class="step-dot"></div>Calculando honorarios y RVU</div>
-      <div class="loading-step" id="step5"><div class="step-dot"></div>Generando lista de insumos</div>
+      <div class="loading-step" id="step5"><div class="step-dot"></div>Finalizando análisis</div>
     </div>
   </div>
 
@@ -876,8 +876,9 @@ REGLAS CRÍTICAS:
     : reportText;
 
   const payload = {
-    model: 'claude-sonnet-4-6',
+    model: 'claude-opus-4-6',
     max_tokens: 8000,
+    temperature: 0,
     stream: true,
     system: systemPrompt,
     messages: [{ role: 'user', content: buildUserPrompt(truncated) }]
