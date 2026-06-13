@@ -470,6 +470,7 @@ Hallazgos: Se evidencia ruptura completa del ligamento cruzado anterior..."></te
     <div class="spinner"></div>
     <p style="font-size:16px;font-weight:600;margin-bottom:8px">Analizando reporte médico...</p>
     <p>Claude está procesando y codificando los diagnósticos</p>
+    <p id="streamCounter" style="font-size:12px;color:var(--accent);margin-top:6px;font-family:monospace"></p>
     <div class="loading-steps">
       <div class="loading-step" id="step1"><div class="step-dot"></div>Extrayendo diagnósticos del reporte</div>
       <div class="loading-step" id="step2"><div class="step-dot"></div>Asignando códigos ICD-9 e ICD-10</div>
@@ -882,8 +883,8 @@ Reglas críticas:
     : reportText;
 
   const payload = {
-    model: 'claude-sonnet-4-6',
-    max_tokens: 16000,
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 8000,
     stream: true,
     system: systemPrompt,
     messages: [{ role: 'user', content: buildUserPrompt(truncated) }]
@@ -924,6 +925,9 @@ Reglas críticas:
           fullText += evt.delta.text;
           charsIn  += evt.delta.text.length;
           updateStreamProgress(Math.min(92, Math.round(charsIn / 70)));
+          // Contador en vivo
+          const counter = document.getElementById('streamCounter');
+          if (counter) counter.textContent = `⟳ Recibiendo respuesta... ${charsIn.toLocaleString()} caracteres`;
         }
       } catch(_) {}
     }
