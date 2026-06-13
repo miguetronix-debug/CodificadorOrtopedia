@@ -403,7 +403,7 @@
     <p>ICD-9 · ICD-10 · CPT · Insumos Quirúrgicos</p>
   </div>
   <div class="spacer"></div>
-  <button class="api-badge" id="apiBadge" onclick="openApiModal()">⚙ API Key</button>
+  <span class="api-badge connected" id="apiBadge">✓ Activo</span>
 </header>
 
 <main>
@@ -805,8 +805,7 @@ function stopLoadingAnimation() {
 
 // ─── Main Analysis ───────────────────────────────────────────────────────────
 async function analyzeReport() {
-  const apiKey = getApiKey();
-  if (!apiKey) { openApiModal(); return; }
+  const apiKey = ''; // La clave está en el servidor (Vercel), no se necesita en el cliente
 
   const text = getInputText();
   if (!text || text.length < 20) {
