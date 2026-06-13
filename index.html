@@ -468,15 +468,15 @@ Hallazgos: Se evidencia ruptura completa del ligamento cruzado anterior..."></te
   <!-- LOADING -->
   <div class="loading-overlay" id="loadingOverlay">
     <div class="spinner"></div>
-    <p style="font-size:16px;font-weight:600;margin-bottom:8px">Analizando reporte médico...</p>
-    <p>Claude está procesando y codificando los diagnósticos</p>
+    <p style="font-size:16px;font-weight:600;margin-bottom:8px">Analizando diagnósticos y CPT... <span style="font-size:12px;font-weight:400;opacity:0.7">(fase 1/2)</span></p>
+    <p>Los insumos se cargarán automáticamente en segundo plano</p>
     <p id="streamCounter" style="font-size:12px;color:var(--accent);margin-top:6px;font-family:monospace"></p>
     <div class="loading-steps">
       <div class="loading-step" id="step1"><div class="step-dot"></div>Extrayendo diagnósticos del reporte</div>
       <div class="loading-step" id="step2"><div class="step-dot"></div>Asignando códigos ICD-9 e ICD-10</div>
       <div class="loading-step" id="step3"><div class="step-dot"></div>Buscando códigos CPT relacionados</div>
       <div class="loading-step" id="step4"><div class="step-dot"></div>Calculando honorarios y RVU</div>
-      <div class="loading-step" id="step5"><div class="step-dot"></div>Generando lista de insumos</div>
+      <div class="loading-step" id="step5"><div class="step-dot"></div>Finalizando fase 1...</div>
     </div>
   </div>
 
@@ -827,32 +827,60 @@ function stopLoadingAnimation() {
   });
 }
 
-// ─── Main Analysis ───────────────────────────────────────────────────────────
+// ─── Main Analysis (dos fases) ───────────────────────────────────────────────
 async function analyzeReport() {
-  const apiKey = ''; // La clave está en el servidor (Vercel), no se necesita en el cliente
-
   const text = getInputText();
   if (!text || text.length < 20) {
     showError('Por favor ingresa el texto del reporte médico (mínimo 20 caracteres).');
     return;
   }
 
-  // Hide previous results
   document.getElementById('resultsSection').style.display = 'none';
   document.getElementById('emptyState').style.display = 'none';
   hideError();
-
-  // Show loading
   document.getElementById('loadingOverlay').classList.add('show');
   document.getElementById('analyzeBtn').disabled = true;
   startLoadingAnimation();
 
   try {
-    const result = await callClaudeAPI(apiKey, text);
+    // ── FASE 1: Diagnósticos + CPT (~8-12s) ─────────────────────────────────
+    const phase1 = await callPhase1API(text);
+
+    // Mostrar resultados de fase 1 de inmediato
     stopLoadingAnimation();
     document.getElementById('loadingOverlay').classList.remove('show');
-    currentResults = result;
-    renderResults(result);
+    phase1.surgical_supplies = [];
+    currentResults = phase1;
+    renderResults(phase1);
+    showPanel('diagnoses');
+
+    // Indicador de carga inline en panel de insumos
+    if (phase1.cpt_procedures?.length) {
+      document.getElementById('panel-supplies').innerHTML = `
+        <div style="text-align:center;padding:56px 24px;color:var(--muted)">
+          <div class="spinner" style="width:36px;height:36px;border-width:3px;margin:0 auto 18px"></div>
+          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px">Generando lista de insumos...</div>
+          <div style="font-size:13px">Los diagnósticos y códigos CPT ya están disponibles</div>
+        </div>`;
+
+      // ── FASE 2: Insumos quirúrgicos (segundo plano, ~8-12s) ───────────────
+      try {
+        const phase2 = await callPhase2API(text, phase1.cpt_procedures);
+        phase1.surgical_supplies = phase2.surgical_supplies || [];
+        currentResults = phase1;
+        renderSupplies(phase1);
+        renderSummary(phase1);
+      } catch(e2) {
+        document.getElementById('panel-supplies').innerHTML = `
+          <div style="text-align:center;padding:40px 24px;color:#e74c3c">
+            <div style="font-size:24px;margin-bottom:10px">⚠</div>
+            <div style="font-weight:600">No se pudo generar la lista de insumos</div>
+            <div style="font-size:12px;margin-top:8px;color:var(--muted)">${esc(e2.message)}</div>
+            <div style="font-size:12px;margin-top:4px;color:var(--muted)">Los diagnósticos y CPT están disponibles en las demás pestañas</div>
+          </div>`;
+      }
+    }
+
   } catch(e) {
     stopLoadingAnimation();
     document.getElementById('loadingOverlay').classList.remove('show');
@@ -863,34 +891,8 @@ async function analyzeReport() {
   }
 }
 
-// ─── Claude API Call ─────────────────────────────────────────────────────────
-async function callClaudeAPI(apiKey, reportText) {
-  const systemPrompt = `Eres un experto en codificación médica (ICD-10-CM, ICD-9-CM, CPT-AMA). Analiza el reporte de imagen diagnóstica y responde SOLO con JSON válido, sin markdown ni texto adicional.
-
-Esquema requerido (completa todos los campos):
-{"patient_context":"resumen","imaging_type":"RX/TC/RMN/US/etc","body_region":"región","diagnoses":[{"id":1,"name":"nombre completo","icd10":{"code":"X00.0","description":"desc oficial"},"icd9":{"code":"000.0","description":"desc oficial"},"evidence_level":"I|II|III|IV","justification":"justificación con guía/clasificación usada"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"desc oficial CPT","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón del modificador","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"estimated_fee_range":"min-max","evidence_level":"I|II|III|IV","indication":"indicación basada en evidencia"}],"surgical_supplies":[{"cpt_code":"00000","cpt_description":"desc","supplies":[{"name":"nombre","specification":"spec técnica","category":"implant|disposable|anesthesia|instrument|other","quantity":"cant","evidence_note":"razón"}]}],"clinical_notes":"notas adicionales","references":["guía/clasificación usada"]}
-
-Reglas críticas:
-- cpt_procedures ordenados MAYOR a MENOR rvu_total
-- RVU basados en AMA RVU Schedule 2024; honorarios = rvu_total × $36.04
-- evidence_level: I=metaanálisis/RCT, II=cohorte, III=casos/expertos, IV=opinión
-- Insumos exhaustivos: implantes, osteosíntesis, suturas, drenajes, anestesia
-- Si no hay indicación quirúrgica clara, incluir CPT diagnósticos/terapéuticos más probables`;
-
-  // Truncar a 4000 chars (suficiente para cualquier reporte de imagen)
-  const truncated = reportText.length > 4000
-    ? reportText.substring(0, 4000) + '\n...[truncado]'
-    : reportText;
-
-  const payload = {
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 8000,
-    stream: true,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: buildUserPrompt(truncated) }]
-  };
-
-  // En producción (Vercel) llama al proxy /api/analyze — la clave está en el servidor
+// ─── Streaming API helper ─────────────────────────────────────────────────────
+async function streamAPI(payload, showProgress) {
   const response = await fetch('/api/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -902,7 +904,6 @@ Reglas críticas:
     throw new Error(err.error?.message || `HTTP ${response.status}`);
   }
 
-  // Streaming — sin timeout, los datos llegan en tiempo real
   const reader  = response.body.getReader();
   const decoder = new TextDecoder();
   let fullText = '';
@@ -924,10 +925,11 @@ Reglas críticas:
         if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
           fullText += evt.delta.text;
           charsIn  += evt.delta.text.length;
-          updateStreamProgress(Math.min(92, Math.round(charsIn / 70)));
-          // Contador en vivo
-          const counter = document.getElementById('streamCounter');
-          if (counter) counter.textContent = `⟳ Recibiendo respuesta... ${charsIn.toLocaleString()} caracteres`;
+          if (showProgress) {
+            updateStreamProgress(Math.min(92, Math.round(charsIn / 50)));
+            const counter = document.getElementById('streamCounter');
+            if (counter) counter.textContent = `⟳ Recibiendo respuesta... ${charsIn.toLocaleString()} caracteres`;
+          }
         }
       } catch(_) {}
     }
@@ -935,6 +937,64 @@ Reglas críticas:
 
   if (!fullText) throw new Error('La API no devolvió contenido. Verifica tu conexión y créditos.');
   return parseClaudeJSON(fullText.trim());
+}
+
+// ─── Fase 1: Diagnósticos + CPT ──────────────────────────────────────────────
+async function callPhase1API(reportText) {
+  const systemPrompt = `Eres experto en codificación médica (ICD-10-CM, ICD-9-CM, CPT-AMA). Analiza el reporte y responde SOLO con JSON válido, sin markdown.
+
+Esquema:
+{"patient_context":"resumen breve","imaging_type":"RX/TC/RMN/US/otro","body_region":"región anatómica","diagnoses":[{"id":1,"name":"diagnóstico completo","icd10":{"code":"X00.0","description":"descripción oficial"},"icd9":{"code":"000.0","description":"descripción oficial"},"evidence_level":"I|II|III|IV","justification":"guía o clasificación usada"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"descripción CPT oficial","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón del modificador","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"estimated_fee_range":"min-max","evidence_level":"I|II|III|IV","indication":"indicación basada en evidencia"}],"clinical_notes":"notas relevantes","references":["guía 1"]}
+
+Reglas: CPT ordenados de MAYOR a MENOR rvu_total. Honorario = rvu_total × $36.04 (AMA RVU 2024). Incluir CPT quirúrgicos, diagnósticos y terapéuticos relevantes.`;
+
+  const truncated = reportText.length > 4000
+    ? reportText.substring(0, 4000) + '\n...[truncado]'
+    : reportText;
+
+  const payload = {
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 4000,
+    stream: true,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: buildUserPrompt(truncated) }]
+  };
+
+  return await streamAPI(payload, true);
+}
+
+// ─── Fase 2: Insumos quirúrgicos ─────────────────────────────────────────────
+async function callPhase2API(reportText, cptProcedures) {
+  const cptList = (cptProcedures || [])
+    .map(c => `CPT ${c.code}: ${c.description}`)
+    .join('\n');
+
+  const extra = getExtraInstructions();
+
+  const systemPrompt = `Eres experto en insumos y materiales quirúrgicos. Genera lista exhaustiva de insumos para los procedimientos CPT indicados. Responde SOLO con JSON válido:
+
+{"surgical_supplies":[{"cpt_code":"00000","cpt_description":"descripción","supplies":[{"name":"nombre del insumo","specification":"especificación técnica (talla, material, marca referencial)","category":"implant|disposable|anesthesia|instrument|other","quantity":"cantidad y unidad","evidence_note":"justificación o guía clínica"}]}]}
+
+Para cada CPT incluir: implantes principales, material de fijación/osteosíntesis, suturas (tipo y talla), drenajes, anestesia/bloqueo regional, instrumental especial. Lista completa según estándares internacionales de quirófano.`;
+
+  const truncated = reportText.length > 2000
+    ? reportText.substring(0, 2000) + '\n...'
+    : reportText;
+
+  let userContent = `Procedimientos CPT indicados:\n${cptList}\n\nContexto clínico (reporte de imagen):\n${truncated}`;
+  if (extra) {
+    userContent += `\n\n---\nINSTRUCCIONES ADICIONALES DEL MÉDICO (aplica con prioridad):\n${extra}`;
+  }
+
+  const payload = {
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 4000,
+    stream: true,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userContent }]
+  };
+
+  return await streamAPI(payload, false);
 }
 
 // ─── Constructor de prompt con instrucciones extra ───────────────────────────
