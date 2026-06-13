@@ -443,6 +443,19 @@ Hallazgos: Se evidencia ruptura completa del ligamento cruzado anterior..."></te
         </div>
       </div>
 
+      <!-- Instrucciones adicionales -->
+      <div style="margin-top:14px">
+        <button onclick="toggleInstructions()" id="instrToggle"
+          style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:0;display:flex;align-items:center;gap:6px">
+          <span id="instrArrow">▶</span> Instrucciones adicionales (opcional)
+        </button>
+        <div id="instrPanel" style="display:none;margin-top:10px">
+          <textarea id="extraInstructions" rows="3"
+            placeholder="Ej: incluir insumos para sala de cirugía ambulatoria, sugerir implantes de titanio marca Synthes, considerar que el paciente es diabético, agregar código de anestesia, etc."
+            style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;color:var(--text);font-size:13px;line-height:1.5;resize:vertical;font-family:inherit"></textarea>
+        </div>
+      </div>
+
       <div class="analyze-bar">
         <span class="char-count" id="charCount">0 caracteres</span>
         <button class="btn btn-success btn-lg" id="analyzeBtn" onclick="analyzeReport()">
@@ -764,6 +777,16 @@ function getInputText() {
     ? document.getElementById('reportText').value.trim()
     : uploadedFileText.trim();
 }
+function getExtraInstructions() {
+  return document.getElementById('extraInstructions')?.value.trim() || '';
+}
+function toggleInstructions() {
+  const panel = document.getElementById('instrPanel');
+  const arrow = document.getElementById('instrArrow');
+  const open  = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  arrow.textContent   = open ? '▼' : '▶';
+}
 
 // ─── Loading Steps ───────────────────────────────────────────────────────────
 let loadingInterval = null;
@@ -863,9 +886,7 @@ Reglas críticas:
     max_tokens: 16000,
     stream: true,
     system: systemPrompt,
-    messages: [{ role: 'user', content:
-      `Analiza el siguiente reporte de imagen diagnóstica y proporciona la codificación médica completa en JSON:\n\n${truncated}`
-    }]
+    messages: [{ role: 'user', content: buildUserPrompt(truncated) }]
   };
 
   // En producción (Vercel) llama al proxy /api/analyze — la clave está en el servidor
@@ -910,6 +931,16 @@ Reglas críticas:
 
   if (!fullText) throw new Error('La API no devolvió contenido. Verifica tu conexión y créditos.');
   return parseClaudeJSON(fullText.trim());
+}
+
+// ─── Constructor de prompt con instrucciones extra ───────────────────────────
+function buildUserPrompt(reportText) {
+  const extra = getExtraInstructions();
+  let prompt = `Analiza el siguiente reporte de imagen diagnóstica y proporciona la codificación médica completa en JSON:\n\n${reportText}`;
+  if (extra) {
+    prompt += `\n\n---\nINSTRUCCIONES ADICIONALES DEL MÉDICO (aplica estas indicaciones con prioridad):\n${extra}`;
+  }
+  return prompt;
 }
 
 // ─── JSON Parser robusto ──────────────────────────────────────────────────────
