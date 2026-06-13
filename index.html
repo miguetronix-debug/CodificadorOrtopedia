@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Codificador Médico ICD · CPT · Insumos</title>
+<title>Codificador Médico ICD · CPT</title>
 <!-- Sin dependencias externas para PDF -->
 <style>
   :root {
@@ -400,7 +400,7 @@
   <div class="logo">🏥</div>
   <div>
     <h1>Codificador Médico</h1>
-    <p>ICD-9 · ICD-10 · CPT · Insumos Quirúrgicos</p>
+    <p>ICD-9 · ICD-10 · CPT</p>
   </div>
   <div class="spacer"></div>
   <span class="api-badge connected" id="apiBadge">✓ Activo</span>
@@ -501,7 +501,6 @@ Hallazgos: Se evidencia ruptura completa del ligamento cruzado anterior..."></te
     <div class="results-tabs">
       <button class="res-tab active" onclick="showPanel('diagnoses')">🩺 Diagnósticos & ICD</button>
       <button class="res-tab" onclick="showPanel('cpt')">💊 Procedimientos CPT</button>
-      <button class="res-tab" onclick="showPanel('supplies')">🏪 Insumos Quirúrgicos</button>
       <button class="res-tab" onclick="showPanel('summary')">📊 Resumen</button>
     </div>
 
@@ -860,24 +859,24 @@ async function analyzeReport() {
 
 // ─── Claude API Call ──────────────────────────────────────────────────────────
 async function callClaudeAPI(reportText) {
-  const systemPrompt = `Eres un experto en codificación médica ICD-10-CM, ICD-9-CM y CPT-AMA especializado en traumatología y ortopedia. Responde ÚNICAMENTE con JSON válido. El PRIMER carácter de tu respuesta debe ser '{' y el ÚLTIMO '}'. Sin markdown, sin backticks, sin texto fuera del JSON.
+  const systemPrompt = `Eres un experto en codificación médica ICD-10-CM, ICD-9-CM y CPT-AMA especializado en traumatología, ortopedia y cirugía. Responde ÚNICAMENTE con JSON válido. El PRIMER carácter debe ser '{' y el ÚLTIMO '}'. Sin markdown, sin backticks, sin ningún texto fuera del JSON.
 
 Esquema:
-{"patient_context":"resumen breve","imaging_type":"modalidad","body_region":"región","diagnoses":[{"id":1,"name":"diagnóstico","icd10":{"code":"X00.0","description":"desc oficial"},"icd9":{"code":"000.0","description":"desc oficial"},"evidence_level":"I|II|III|IV","justification":"clasificación AO/Gustilo/Neer/etc"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"desc CPT","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón breve","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"evidence_level":"I|II|III|IV","indication":"indicación breve"}],"surgical_supplies":[{"cpt_code":"00000","cpt_description":"desc","supplies":[{"name":"insumo","specification":"talla/material/marca","category":"implant|disposable|anesthesia|instrument|other","quantity":"cant+unidad","evidence_note":"guía"}]}],"clinical_notes":"notas","references":["ref"]}
+{"patient_context":"resumen clínico del caso","imaging_type":"RX|TC|RMN|US|etc","body_region":"región anatómica específica","diagnoses":[{"id":1,"name":"nombre diagnóstico completo","icd10":{"code":"X00.0","description":"descripción oficial ICD-10-CM"},"icd9":{"code":"000.0","description":"descripción oficial ICD-9-CM"},"evidence_level":"I|II|III|IV","justification":"clasificación usada: AO, Gustilo, Neer, Schatzker, Garden, etc"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"descripción oficial CPT completa","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón del modificador","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"estimated_fee_range":"min-max USD","evidence_level":"I|II|III|IV","indication":"indicación clínica basada en evidencia"}],"clinical_notes":"notas clínicas adicionales relevantes","references":["guía o clasificación utilizada"]}
 
-REGLAS CRÍTICAS — sé BREVE en textos pero EXHAUSTIVO en cantidad de códigos:
-- CPT ordenados MAYOR a MENOR rvu_total. RVU × $36.04 = honorario (AMA 2024)
-- Incluir TODOS los CPT aplicables: procedimiento principal, adicionales, diagnósticos, terapéuticos, cierre, artroscopia, fijación, injerto, anestesia regional
-- Por cada diagnóstico incluir CPT específicos
-- Insumos por CPT: implantes, tornillos, suturas+calibre, drenajes, anestesia, instrumental, tourniquet si aplica
-- Textos descriptivos: máximo 1 oración. La exhaustividad en CANTIDAD es la prioridad`;
+REGLAS CRÍTICAS:
+- CPT ordenados MAYOR a MENOR rvu_total
+- Honorario = rvu_total × $36.04 (AMA RVU Schedule 2024)
+- Incluir TODOS los CPT aplicables: procedimiento principal, procedimientos adicionales, diagnósticos, terapéuticos, artroscopia, reducción, fijación, injerto, cierre de heridas, anestesia regional si aplica
+- Por cada diagnóstico incluir CPT específicos — NO omitir por brevedad
+- evidence_level: I=metaanálisis/RCT, II=cohorte, III=serie/expertos, IV=opinión`;
 
   const truncated = reportText.length > 4000
     ? reportText.substring(0, 4000) + '\n...[truncado]'
     : reportText;
 
   const payload = {
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-sonnet-4-6',
     max_tokens: 8000,
     stream: true,
     system: systemPrompt,
@@ -1163,8 +1162,6 @@ function renderSummary(data) {
   const panel = document.getElementById('panel-summary');
   const totalRVU = (data.cpt_procedures||[]).reduce((s,c) => s+(c.rvu_total||0), 0);
   const totalFee = (data.cpt_procedures||[]).reduce((s,c) => s+(c.estimated_fee_usd||0), 0);
-  const totalSupplies = (data.surgical_supplies||[]).reduce((s,g) => s+(g.supplies||[]).length, 0);
-
   panel.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px">
       ${[
@@ -1172,7 +1169,6 @@ function renderSummary(data) {
         ['📋','Procedimientos CPT',(data.cpt_procedures||[]).length,'códigos asignados'],
         ['⚡','RVU Total',totalRVU.toFixed(2),'unidades de valor relativo'],
         ['💵','Honorario Est.','$'+totalFee.toLocaleString(),'USD (cirujano)'],
-        ['🏪','Insumos',totalSupplies,'ítems listados'],
       ].map(([icon,label,val,sub]) => `
         <div class="card" style="text-align:center;padding:20px 16px">
           <div style="font-size:28px;margin-bottom:8px">${icon}</div>
@@ -1221,7 +1217,7 @@ function showPanel(name) {
   document.querySelectorAll('.res-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
   const tabs = document.querySelectorAll('.res-tab');
-  const panelNames = ['diagnoses','cpt','supplies','summary'];
+  const panelNames = ['diagnoses','cpt','summary'];
   const idx = panelNames.indexOf(name);
   if (idx >= 0 && tabs[idx]) tabs[idx].classList.add('active');
 }
