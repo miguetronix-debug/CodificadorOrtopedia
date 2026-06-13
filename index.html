@@ -953,7 +953,8 @@ Reglas críticas:
 - Si hay múltiples diagnósticos, incluir CPT específicos para cada uno
 - Si no hay indicación quirúrgica clara, incluir CPT diagnósticos/terapéuticos conservadores más probables
 - NO omitir códigos por brevedad — la exhaustividad es prioritaria
-- evidence_level: I=metaanálisis/RCT, II=cohorte prospectiva, III=casos/series/expertos, IV=opinión experta`;
+- evidence_level: I=metaanálisis/RCT, II=cohorte prospectiva, III=casos/series/expertos, IV=opinión experta
+- CRÍTICO: tu respuesta debe comenzar DIRECTAMENTE con el carácter '{' sin ningún texto previo, sin backticks, sin markdown. El último carácter debe ser '}'`;
 
   const truncated = reportText.length > 4000
     ? reportText.substring(0, 4000) + '\n...[truncado]'
@@ -994,7 +995,8 @@ Para cada CPT incluir SIN EXCEPCIÓN:
 - Material de vendaje y cierre: apósitos, férulas, yesos
 - Tourniquet neumático si aplica
 - Electrocauterio, campo quirúrgico, equipo de fluoroscopia intraoperatoria
-Lista según estándares internacionales (AAOS, AO Foundation, SICOT).`;
+Lista según estándares internacionales (AAOS, AO Foundation, SICOT).
+CRÍTICO: tu respuesta debe comenzar DIRECTAMENTE con '{' sin backticks, sin markdown, sin texto previo. El último carácter debe ser '}'`;
 
   const truncated = reportText.length > 2000
     ? reportText.substring(0, 2000) + '\n...'
@@ -1028,28 +1030,36 @@ function buildUserPrompt(reportText) {
 
 // ─── JSON Parser robusto ──────────────────────────────────────────────────────
 function parseClaudeJSON(rawText) {
-  // Estrategia 1: parseo directo
-  try { return JSON.parse(rawText); } catch(_) {}
+  // Pre-limpieza: quitar markdown (```json ... ```) aunque esté truncado
+  let cleaned = rawText.trim();
+  // Quitar apertura ```json o ``` al inicio
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '');
+  // Quitar cierre ``` al final si existe
+  cleaned = cleaned.replace(/\s*```\s*$/, '');
+  cleaned = cleaned.trim();
 
-  // Estrategia 2: extraer de bloque ```json ... ```
-  const codeMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeMatch) {
-    try { return JSON.parse(codeMatch[1].trim()); } catch(_) {}
-  }
+  // Estrategia 1: parseo directo del texto limpio
+  try { return JSON.parse(cleaned); } catch(_) {}
 
-  // Estrategia 3: buscar primer { hasta último }
-  const first = rawText.indexOf('{');
-  const last  = rawText.lastIndexOf('}');
+  // Estrategia 2: primer { hasta último } del texto limpio
+  const first = cleaned.indexOf('{');
+  const last  = cleaned.lastIndexOf('}');
   if (first !== -1 && last > first) {
-    const candidate = rawText.slice(first, last + 1);
+    const candidate = cleaned.slice(first, last + 1);
     try { return JSON.parse(candidate); } catch(_) {}
-
-    // Estrategia 4: reparar JSON truncado
+    // Estrategia 3: reparar JSON truncado (limpio)
     try { return JSON.parse(repairJSON(candidate)); } catch(_) {}
   }
 
-  // Sin opciones — mostrar primeros 300 chars para diagnóstico
-  const preview = rawText.substring(0, 300).replace(/</g,'&lt;');
+  // Estrategia 4: mismo proceso sobre texto original (sin limpiar)
+  const firstRaw = rawText.indexOf('{');
+  const lastRaw  = rawText.lastIndexOf('}');
+  if (firstRaw !== -1 && lastRaw > firstRaw) {
+    const candidateRaw = rawText.slice(firstRaw, lastRaw + 1);
+    try { return JSON.parse(candidateRaw); } catch(_) {}
+    try { return JSON.parse(repairJSON(candidateRaw)); } catch(_) {}
+  }
+
   console.error('Respuesta completa de Claude:', rawText);
   throw new Error(
     `No se pudo procesar la respuesta de Claude.\n` +
