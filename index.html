@@ -859,24 +859,43 @@ async function analyzeReport() {
 
 // ─── Claude API Call ──────────────────────────────────────────────────────────
 async function callClaudeAPI(reportText) {
-  const systemPrompt = `Eres un experto en codificación médica ICD-10-CM, ICD-9-CM y CPT-AMA especializado en traumatología, ortopedia y cirugía. Responde ÚNICAMENTE con JSON válido. El PRIMER carácter debe ser '{' y el ÚLTIMO '}'. Sin markdown, sin backticks, sin ningún texto fuera del JSON.
+  const systemPrompt = `Eres un codificador médico certificado (CPC) con especialización en traumatología, ortopedia, cirugía y radiología. Tu función es realizar una EVALUACIÓN EXTENDIDA Y EXHAUSTIVA del reporte de imagen diagnóstica para extraer TODOS los códigos ICD y CPT aplicables con máxima precisión, ya que estos códigos se usan para facturación médica y documentos legales.
+
+Responde ÚNICAMENTE con JSON válido. El PRIMER carácter debe ser '{' y el ÚLTIMO '}'. Sin markdown, sin backticks, sin texto fuera del JSON.
 
 Esquema:
-{"patient_context":"resumen clínico del caso","imaging_type":"RX|TC|RMN|US|etc","body_region":"región anatómica específica","diagnoses":[{"id":1,"name":"nombre diagnóstico completo","icd10":{"code":"X00.0","description":"descripción oficial ICD-10-CM"},"icd9":{"code":"000.0","description":"descripción oficial ICD-9-CM"},"evidence_level":"I|II|III|IV","justification":"clasificación usada: AO, Gustilo, Neer, Schatzker, Garden, etc"}],"cpt_procedures":[{"rank":1,"code":"00000","description":"descripción oficial CPT completa","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"razón del modificador","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"estimated_fee_range":"min-max USD","evidence_level":"I|II|III|IV","indication":"indicación clínica basada en evidencia"}],"clinical_notes":"notas clínicas adicionales relevantes","references":["guía o clasificación utilizada"]}
+{"patient_context":"resumen clínico completo incluyendo mecanismo de lesión, lateralidad, cronicidad","imaging_type":"RX|TC|RMN|US|Artro-RMN|etc","body_region":"región anatómica específica con lateralidad","diagnoses":[{"id":1,"name":"nombre diagnóstico completo y específico con lateralidad","icd10":{"code":"X00.00","description":"descripción oficial exacta ICD-10-CM incluyendo lateralidad"},"icd9":{"code":"000.00","description":"descripción oficial exacta ICD-9-CM"},"evidence_level":"I|II|III|IV","justification":"sistema de clasificación aplicado: AO/OTA, Gustilo-Anderson, Neer, Schatzker, Garden, Outerbridge, Rockwood, SLAP, Tossy, etc. Grado o tipo específico."}],"cpt_procedures":[{"rank":1,"code":"00000","description":"descripción oficial CPT completa","related_diagnosis_ids":[1],"modifiers":["RT"],"modifier_justification":"justificación clínica del modificador según guías AMA","rvu_total":0.00,"rvu_work":0.00,"rvu_practice":0.00,"rvu_malpractice":0.00,"estimated_fee_usd":0,"estimated_fee_range":"min-max USD","evidence_level":"I|II|III|IV","indication":"indicación clínica específica basada en hallazgos del reporte"}],"clinical_notes":"hallazgos adicionales relevantes, comorbilidades que afectan codificación, consideraciones legales","references":["clasificación o guía utilizada con año"]}
 
-REGLAS CRÍTICAS:
-- CPT ordenados MAYOR a MENOR rvu_total
-- Honorario = rvu_total × $36.04 (AMA RVU Schedule 2024)
-- Incluir TODOS los CPT aplicables: procedimiento principal, procedimientos adicionales, diagnósticos, terapéuticos, artroscopia, reducción, fijación, injerto, cierre de heridas, anestesia regional si aplica
-- Por cada diagnóstico incluir CPT específicos — NO omitir por brevedad
-- evidence_level: I=metaanálisis/RCT, II=cohorte, III=serie/expertos, IV=opinión`;
+REGLAS DE CODIFICACIÓN EXTENDIDA:
+1. ICD — extraer TODOS los diagnósticos presentes en el reporte:
+   - Diagnóstico principal + diagnósticos secundarios + hallazgos incidentales codificables
+   - Usar código más específico disponible (con lateralidad, cronicidad, tipo)
+   - Incluir códigos de causa externa (mecanismo de lesión) si aplica: W, V, X, Y
+   - Códigos de estado post-procedimiento si aplica: Z96, Z97, Z47
+   - Secuelas y complicaciones si las hay
+
+2. CPT — incluir TODOS los procedimientos aplicables ordenados MAYOR a MENOR rvu_total:
+   - Procedimiento quirúrgico principal (mayor RVU)
+   - Procedimientos adicionales en misma sesión (con modificador -51 si aplica)
+   - Procedimientos bilaterales (modificador -50) o por extremidad (-RT/-LT)
+   - Artroscopia diagnóstica o terapéutica según hallazgos
+   - Reducción abierta o cerrada con/sin fijación interna
+   - Injertos óseos, colgajos, reconstrucciones ligamentarias
+   - Procedimientos de tejidos blandos: reparación tendinosa, capsular, labral
+   - CPT de imagen diagnóstica si se realizó durante el acto
+   - Anestesia regional/bloqueo si documentado
+   - Código de visita/evaluación (E&M) si aplica
+
+3. Honorarios: rvu_total × $36.04 (AMA RVU Schedule 2024 — factor conversión Medicare)
+4. Modificadores obligatorios: -RT/-LT (lateralidad), -50 (bilateral), -51 (procedimientos múltiples), -22 (aumento de complejidad), -59 (procedimiento distinto)
+5. evidence_level: I=metaanálisis/RCT, II=cohorte prospectiva, III=serie casos/consenso expertos, IV=opinión experta`;
 
   const truncated = reportText.length > 4000
     ? reportText.substring(0, 4000) + '\n...[truncado]'
     : reportText;
 
   const payload = {
-    model: 'claude-opus-4-6',
+    model: 'claude-sonnet-4-6',
     max_tokens: 8000,
     temperature: 0,
     stream: true,
